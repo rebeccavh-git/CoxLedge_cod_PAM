@@ -1,0 +1,66 @@
+---
+title: "glider_data_2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load data and packages
+
+```{r}
+library(dplyr)
+library(lubridate)
+library(tidyr)
+
+tel_data = read.csv("data/for_map/glider_telemetry_19.csv", header = TRUE)
+lfdcs_data = read.csv("data/for_map/glider_LFDCS_19.csv", header = TRUE)
+```
+
+## Summarize telemetry by hour
+
+```{r}
+tel_data$Datetime = mdy_hm(tel_data$Datetime, tz = "EST", quiet = TRUE, truncated = 1)
+
+tel_counts = tel_data %>%
+  group_by(Tag_ID, year = year(Datetime), month = month(Datetime), day = day(Datetime), 
+           hour = hour(Datetime)) %>%
+  summarise(det_tally = n(), latitude = mean(Latitude), longitude = mean(Longitude))
+
+```
+
+## add species name to telemetry
+
+```{r}
+# not corect code
+tel_counts$species = tel_counts %>%
+  case_when(Tag_ID == "A69-1602-58717" ~ "Atlantic_cod",
+            Tag_ID == "A69-1602-58722" ~ "Atlantic_cod",
+            Tag_ID == "A69-1602-58727" ~ "Atlantic_cod",
+            Tag_ID == "A69-1602-58769" ~ "Atlantic_cod",
+            Tag_ID == "A69-1602-58772" ~ "Atlantic_cod",
+            Tag_ID == "A69-1602-58774" ~ "Atlantic_cod",
+            Tag_ID == "A69-1602-58782" ~ "Atlantic_cod")
+
+# A69-1303-47597	sand tiger shark
+#A69-9001-16029	Sandbar shark
+#A69-9001- 16094	winter skate
+```
+
+## Summarize LFDCS by hour
+
+```{r}
+lfdcs_data$Datetime = mdy_hm(lfdcs_data$Datetime, tz = "EST", quiet = TRUE, truncated = 1)
+
+# make data long
+lfdcs_long = pivot_longer(lfdcs_data, c(Sei:Humpback), 
+                          names_to = "species", values_to = "det_tally")
+
+lfdcs_counts = lfdcs_long %>%
+  group_by(species, year = year(Datetime), month = month(Datetime), day = day(Datetime), 
+           hour = hour(Datetime)) %>%
+  summarize(det_tally = sum(det_tally), latitude = mean(Latitude), longitude = mean(Longitude))
+
+```
+

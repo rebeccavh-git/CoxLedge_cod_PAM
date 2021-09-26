@@ -1,0 +1,40 @@
+---
+title: "CoxLedge_SDM"
+author: "Becca Van Hoeck"
+date: "6/3/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Packages
+
+```{r}
+library(terra)
+library(sp)
+library(basemaps)
+library(ggplot2)
+
+install.packages("basemaps")
+
+```
+
+## load Basemap and make empty grid
+
+```{r}
+
+# Spatial grid
+
+#SpatialGrid(grid, proj4string = CRS(as.character(NA)))
+
+# ext = ... add extent here
+
+basemap_ggplot(ext, map_service = 'esri', map_type = "world_ocean_base")
+
+
+
+```
+
+# Add data as spatial points

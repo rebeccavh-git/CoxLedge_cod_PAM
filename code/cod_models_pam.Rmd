@@ -1,0 +1,287 @@
+---
+title: "Rebecca Van Hoeck"
+author: "Becca Van Hoeck"
+date: "4/19/2021"
+output: html_document
+---
+
+Research Questions: 
+
+1. What are the environmental correlates of Atlantic cod spawning vocalizations, including grunt rate and presence? 
+2. Do they differ between the Massachusetts Bay and Cox Ledge Region? 
+
+Current Method: 
+
+- treat natural cycles as circular variables to estimate magnitude and direction of correlation
+- Use GLMs to model grunt presence and rate separately
+- Ultimately, I planned to use a hurdle model, but was having difficulty interpreting the output so I moved forward with separate models. 
+
+Questions: 
+
+1. Is this statistical framework suitable to evaluate the question? 
+2. Am I building and evaluating the models correctly?
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(lunar)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(ggplot2)
+
+```
+
+## Script to build models and evaluate model fit to identify environmental drivers of atlantic cod vocalizations
+
+Load data - all data wrangling and exploratory visualizations were done in historical_cod_data.RMD
+```{r}
+
+## Tidy data with grunt presence, rate, and associated environmental variables
+# note that there are many times missing temperatures. Possibly not able to use this variable because grunt data is so sparse. I don't want to remove some cod data just to have complete cases with temperature
+
+cod_data = read.csv("data/cod_allregions07-21.csv", header = TRUE)
+cod_data = cod_data[,-1] # remove row index
+
+```
+
+## Creating sin and cos variables for natural cycles
+
+```{r}
+
+# Hour of the day
+cod_data$shour = sin(2*pi*(cod_data$hour/24)) # this matches
+cod_data$chour = cos(2*pi*(cod_data$hour/24)) 
+
+# Julian Day
+cod_data$sday = sin(2*pi*(cod_data$J/365))
+cod_data$cday = cos(2*pi*(cod_data$J/365))
+  
+# Lunar cycle  
+cod_data$sLunar = sin(cod_data$lunarphase) 
+cod_data$cLunar = cos(cod_data$lunarphase)
+
+#Semi lunar cycle
+cod_data$sLunar2 = sin(cod_data$lunar2)
+cod_data$cLunar2 = cos(cod_data$lunar2)
+
+
+```
+
+# Modeling presence and rate separately
+
+# Presence with Cox Ledge and Mass Bay Data
+
+Full presence mod from caiger et al: Y + S + H + D + L1 + L2 +J + rW + S:J
+
+```{r}
+library(lme4)
+
+# singularity for region when site is included
+codMod = glm(presence ~ SpawnSeason + site + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 + sday + cday,
+                 data = cod_data, family = binomial(link = "logit"))
+summary(codMod)
+drop1(codMod)
+
+# remove site, but add region
+codMod_nosite = glm(presence ~ SpawnSeason + region + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 + sday + cday,
+                 data = cod_data, family = binomial(link = "logit"))
+summary(codMod_nosite)
+drop1(codMod_nosite)
+
+# Same as CodMod_nosite, but added site as a random intercept
+codMod_rSite = glmer(presence ~ SpawnSeason + region + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 + sday + cday + 
+                       (1|site), data = cod_data, family = binomial(link = "logit"))
+summary(codMod_rSite)
+# region is highly correlated with the intercept and its fixed effect  p value is high
+# i don't know how to interpret the random effects
+
+# Random site nested within Region - not sure if code is correct. The summary is the same as rSite model above
+codModNB_rSiteNested = glmer(presence ~ SpawnSeason + region + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 + 
+                                sday + cday + (1|site:region), data = cod_data, family = binomial(link = "logit"))
+summary(codModNB_rSiteNested)
+
+# Random slope and intercept for site? again not sure code is correct
+# warning: boundary (singular) fit
+codModNB_rSiteIS = glmer(presence ~ SpawnSeason + region + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 + 
+                                sday + cday + (1+site|region), data = cod_data, family = binomial(link = "logit"))
+summary(codModNB_rSiteIS)# change to cod mod once run
+
+# AIC suggests that the simplest model - without region is the best fit
+AIC(codMod, codMod_nosite, codMod_rSite, codModNB_rSiteNested, codModNB_rSiteIS)
+
+# this code came from class notes, but don't remember which lesson
+cod_data$P_resid = residuals(codMod, type = "pearson")
+cod_data$d_resid = residuals(codMod, type = "deviance")
+
+sum(cod_data$P_resid)/df.residual(codMod_nosite)
+# does this mean that there is a significant difference in presence, or significant difference in covariates?
+
+```
+
+## Model Grunt Rate
+
+Rate mod from Caiger et al: Y, S, H, L1, L2, J, rW, S:J.
+```{r}
+#library(gamlss)
+library(lme4)
+library(MASS) # has glmer.nb function
+
+# Full model - no region 
+RateMod_full = glm(n_grunts ~ SpawnSeason + site + shour + chour + sLunar + cLunar + sLunar2 + cLunar2, 
+               data = cod_data, poisson(link = "log"))
+summary(RateMod_full)
+
+# same model but negative binomial 
+RateModNB_full = glm.nb(n_grunts ~ SpawnSeason + site + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                   data = cod_data)
+summary(RateModNB_full)
+
+RateModNB_region = glm.nb(n_grunts ~ SpawnSeason + region + site + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                   data = cod_data)
+summary(RateModNB_region)
+
+# AIC suggests the neg bin is a much better fit
+AIC(RateMod_full, RateModNB_full)
+
+# Continue using NB error, add region and change site to a random intercept
+RateModNB_rSite = glmer.nb(n_grunts ~ SglmpawnSeason + region + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 +
+                       (1|site), data = cod_data)
+summary(RateModNB_rSite)
+# Region was not significant
+# no strong correlations between predictor variables - suggests data do not need to be centered or rescaled
+# p value given in fixed effects table, but not usually given for lmer output. Can I trust those values?
+
+drop1(RateModNB_rSite, test = "Chisq")
+
+library(lmerTest)
+drop1(RateModNB_rSite, ddf = "Satterthwaite")
+
+# mixed effects model has higher AIC than neg bin with just site
+AIC(RateMod_full, RateModNB_full,RateModNB_rSite)
+
+RateModNB_rSiteNested = glmer.nb(n_grunts ~ SpawnSeason + region + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 +
+                       (1|site:region), data = cod_data)
+summary(RateModNB_rSiteNested)
+
+RateModNB_rSiteIS = glmer.nb(n_grunts ~ SpawnSeason + region + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 +
+                       (1+site|region), data = cod_data)
+summary(RateModNB_rSiteIS)
+ 
+#ratePredict = predict(RateModNBII)
+#plot(ratePredict)
+```
+
+# Mixture and hurdle models
+Caiger et al 2020 (MEPS) Global Model: Ten years of data from Mass Bay
+
+presence or rate ~ year + site + hour + depth + lunar + semiLunar + JulianDay + S:Julian Day + random(week)
+
+- hour, lunar, semilunar, julian day were all cyclical
+- random effect of week was to account for serial autocorrelation
+- Used model averaged predictions, weighted by AIC, with all models with deltaAIC <5. 
+
+Presence model: Top 4 models averaged. All included Y, S, H, D, J, rW, S:J. One included L1, one omitted all Lunar, one included both L1 & L2, one included only L1. 
+
+Rate model: model evaluated predictors for the rate zero-inf terms separately. Two models were averaged, rate terms were the same and included: Y, S, H, L1, L2, J, rW, S:J. Zero inflated were the same as rate, except one model excluded L2. 
+
+```{r}
+# following ENEC563 Lab 15 for Mixture and Hurdle Models
+
+# starting with the global model
+# does not include region yet, because of singularity with site
+# also does not include random effect of week. 
+
+library(pscl)
+zip1 = zeroinfl(n_grunts ~ SpawnSeason + region + shour + chour + sLunar + cLunar + sday + cday + site:J |
+                  SpawnSeason + region + shour + chour + sLunar + cLunar + sday + cday + site:J, 
+                dist = "poisson", link = "logit", data = cod_data)
+summary(zip1)
+
+#this was computationally singular? 
+Nb1 = zeroinfl(n_grunts ~ SpawnSeason + region + shour + chour + sLunar + cLunar + sday + cday + site:J |
+                  SpawnSeason + region + shour + chour + sLunar + cLunar + sday + cday + site:J, 
+                dist = "negbin", link = "logit", data = cod_data)
+summary(Nb1)
+
+# but the likelihood is much higher for the Neg Bin that only gave coefficient estimates
+library(lmtest)
+lrtest(zip1, Nb1)
+
+
+```
+
+## Model each region separately and compare best models
+
+Because I am not sure the above method is appropriate for evaluating whether the environmental correlates differ between the two regions, I modeled each region separately. 
+
+This workflow leads to the same final model for each region. This adds some confirmation to me that there likely is no significant difference between the timing of spawning in the two regions. 
+
+```{r}
+CoxLedge = cod_data %>%
+  filter(region == 'CoxLedge')
+
+MassBay = cod_data %>%
+  filter(region == "MassBay")
+
+# Cox ledge data
+
+# Presence
+codModCL = glm(presence ~ SpawnSeason + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 + sday + cday,
+                 data = CoxLedge, family = binomial(link = "logit"))
+summary(codModCL)
+drop1(codModCL)
+
+# Rate
+# Full model - no region 
+RateMod_fullCL = glm(n_grunts ~ SpawnSeason + shour + chour + sLunar + cLunar + sLunar2 + cLunar2, 
+               data = CoxLedge, poisson(link = "log"))
+summary(RateMod_fullCL)
+
+# same model but negative binomial 
+library(MASS)
+RateModNB_fullCL = glm.nb(n_grunts ~ SpawnSeason + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                   data = CoxLedge)
+summary(RateModNB_fullCL)
+
+# AIC suggests the neg bin is a much better fit
+AIC(RateMod_fullCL, RateModNB_fullCL)
+
+drop1(RateModNB_fullCL)
+
+
+
+```
+
+# Mass Bay data
+
+```{r}
+
+# Presence
+codModMB = glm(presence ~ SpawnSeason + site + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 + sday + cday,
+                 data = MassBay, family = binomial(link = "logit"))
+summary(codModMB)
+
+drop1(codModMB)
+
+# Rate
+# Full model - no region 
+RateMod_fullMB = glm(n_grunts ~ SpawnSeason + site + shour + chour + sLunar + cLunar + sLunar2 + cLunar2, 
+               data = MassBay, poisson(link = "log"))
+summary(RateMod_fullMB)
+
+# same model but negative binomial 
+library(MASS)
+RateModNB_fullMB = glm.nb(n_grunts ~ SpawnSeason + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                   data = MassBay)
+summary(RateModNB_fullMB)
+
+# AIC suggests the neg bin is a much better fit
+AIC(RateMod_fullMB, RateModNB_fullMB)
+
+drop1(RateModNB_fullMB)
+
+
+
+```
+

@@ -1,0 +1,39 @@
+---
+title: "cod_1219"
+author: "Becca Van Hoeck"
+date: "8/17/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+setwd("C:/Users/Becca/Documents/Grad_School/Research/Projects/Cox_Ledge_PAM/glider_2019")
+
+library(dplyr)
+library(tidyr)
+
+```
+
+
+```{r}
+tracks = read.table('cox1219_editedtracks.csv', sep = ",")
+tracks = as.data.frame(tracks)
+
+metadata = tracks[1:3,]
+tracks = tracks[c(-1,-2,-3),1:3]
+
+## trying to filter out 
+#surface_tracks = filter(tracks, V2 == NA)
+tracks$V2 = as.numeric(tracks$V2)
+surface_tracks = tracks[drop_na(tracks$V2),]
+surface_tracks = tracks %>% drop_na(V2)
+
+surface_points = surface_tracks[!duplicated(surface_tracks[,1]),]
+
+surface_points = unique(surface_tracks$V1)
+
+write.csv(surface_points, file = "surface_points.csv")
+
+```
+

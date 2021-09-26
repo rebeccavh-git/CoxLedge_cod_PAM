@@ -1,0 +1,154 @@
+---
+title: "recreating_mass_bay_model"
+author: "Becca Van Hoeck"
+date: "6/29/2021"
+output: html_document
+---
+
+## Using Mass Bay data from from Micah to recreate analyses from Caiger et al 2020
+
+Will then add in the CoxLedge data and model again
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Data and Libraries
+
+```{r}
+
+load('data/gsub.rdat')
+
+library(dplyr)
+library(lunar)
+library(lme4)
+library(lubridate)
+library(gamlss)
+library(glmmTMB)
+
+# this was the method for Zemeckis et al 2019
+# check average grunt rate and remove sites with too few
+gruntperday = gsub %>% 
+  group_by(SiteY, Date) %>%
+  summarise(GPD = sum(GPH))
+
+confirm_s = gruntperday %>% 
+  group_by(SiteY) %>% 
+  summarise(avgPD = mean(GPD))
+
+#codMB = left_join(gsub, confirm_s, by = "SiteY")
+#codMB = codMB %>%
+# filter(avgPD > 5)
+
+gsub = left_join(gsub, confirm_s, by = "SiteY")
+
+# Check average rate by site (all years)
+gruntperdaySite = gsub %>% 
+  group_by(Site, Date) %>%
+  summarise(GPD = sum(GPH))
+
+confirm_sS = gruntperdaySite %>% 
+  group_by(Site) %>% 
+  summarise(SiteavgPD = mean(GPD))
+
+#codMB = left_join(gsub, confirm_sS, by = "Site")
+#codMB = codMB %>%
+#  filter(avgPD >= 5)
+gsub = left_join(gsub, confirm_sS, by = "Site")
+
+# Check average rate by Year (all sites)
+gruntperdayYear = gsub %>% 
+  group_by(Site, Year, Date) %>%
+  summarise(GPD = sum(GPH))
+
+confirm_sY = gruntperdayYear %>% 
+  group_by(Year) %>% 
+  summarise(YearavgPD = mean(GPD))
+
+#codMB = left_join(gsub, confirm_sS, by = "Site")
+#codMB = codMB %>%
+#  filter(avgPD >= 5)
+gsub = left_join(gsub, confirm_sY, by = "Year")
+
+
+codMB = gsub %>%
+  filter(avgPD >5 & SiteavgPD >5 & YearavgPD >5)
+unique(codMB$Year)
+unique(codMB$SiteY)
+
+unique(gsub$SiteY)
+
+```
+
+## Build presence model:
+
+Full model: presence ~ Year, site, depth, diel, lunar, semi-lunar, seasonal?, interaction station and seasonal, rWeek,
+(all natural cycles were circular (sin and cos))
+
+- binomial error
+- model selection with AIC
+
+Column names: 
+presence: GRUNTS
+Year = Year
+site: Site
+depth: DEPTH
+diel sin: Hsin
+diel cos: Hcos
+lunar sin: Msin
+lunar cos: Mcos
+semilunar sin: Lsin
+semilunar cos: Lcos
+seasonal sin: Jsin
+seasonal cos: Jcos
+week= WK
+Site:seasonal: Site:J
+
+Caiger et al 2020 omitted sites with grunts on <10 days/year or had grunts on <2% of hours overall?   
+
+```{r}
+# global model has many singularities in interaction term
+presenceGlobal = glmmTMB(GRUNTS ~ Year + Site + DEPTH+ Hsin + Hcos + Msin + Mcos + Lsin + Lcos + Jsin + Jcos + (1|WK) + Site:J,
+                       family = binomial, data = codMB)
+summary(presenceGlobal)
+anova(presenceGlobal, test = "Chisq")
+
+presenceNoL = glmmTMB(GRUNTS ~ Year + Site + DEPTH+ Hsin + Hcos + Jsin + Jcos + (1|WK) + Site:J,
+                  family = binomial, data = codMB)
+summary(presenceNoL)
+anova(presenceNoL, test = "Chisq")
+AIC(presenceNoL)
+
+
+```
+
+## Build grunt rate model: 
+
+Full model: rate ~ same as presence
+
+- zero-inflated neg-binomial
+
+rate: GPH
+station: Site
+diel sin: Hsin
+diel cos: Hcos
+lunar sin: Msin
+lunar cos: Mcos
+semilunar sin: Lsin
+semilunar cos: Lcos
+annual: Y
+station:year: SiteY
+
+Y + S + H + L1 + L2 + J + rW + S:J
+Y + S + H + L1 + J + rW + S:J
+
+```{r}
+# this was taking forever to run, when i cancelled it threw warnings
+rateBest = glmmTMB(GPH ~ Year + Site + Hsin + Hcos + Msin + Mcos + Lsin + Lcos + Jsin + Jcos + (1|WK) + Site:J,
+                   zi = ~ Year + Site+  + Hsin + Hcos + Msin + Mcos + Jsin + Jcos + (1|WK) + Site:J,
+                   family = nbinom1, data = codMB)
+
+
+
+```
+
