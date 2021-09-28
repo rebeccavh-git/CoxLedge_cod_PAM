@@ -1,5 +1,5 @@
 ---
-title: "Rebecca Van Hoeck"
+title: "Cod Models"
 author: "Becca Van Hoeck"
 date: "4/19/2021"
 output: html_document
@@ -7,8 +7,13 @@ output: html_document
 
 Research Questions: 
 
-1. What are the environmental correlates of Atlantic cod spawning vocalizations, including grunt rate and presence? 
-2. Do they differ between the Massachusetts Bay and Cox Ledge Region? 
+1. Is the timing of Atlantic cod spawning-associated vocalization, including grunt presence and rate, correlated with environmental variables? 
+2. Do these environmental correlates differ between the Massachusetts Bay and Cox Ledge Region? 
+
+Data Source:
+- Fixed station passive acoustic monitoring data from spawning season of 2013 and 2014 at Cox Ledge and Mass Bay
+- Cox Ledge dataset consists of 1 site, whereas Mass Bay has 5 sites within the region. 
+- Data are summarized by cod grunt presence and grunt rate per hour during the spawning season.
 
 Current Method: 
 
@@ -19,7 +24,7 @@ Current Method:
 Questions: 
 
 1. Is this statistical framework suitable to evaluate the question? 
-2. Am I building and evaluating the models correctly?
+2. Am I building and evaluating the models correctly? Specifically, I am unsure how to account for the nested site within region and the unbalanced number of sites between the regions. 
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -32,7 +37,7 @@ library(ggplot2)
 
 ```
 
-## Script to build models and evaluate model fit to identify environmental drivers of atlantic cod vocalizations
+## Script to build models and evaluate fit 
 
 Load data - all data wrangling and exploratory visualizations were done in historical_cod_data.RMD
 ```{r}
@@ -50,7 +55,7 @@ cod_data = cod_data[,-1] # remove row index
 ```{r}
 
 # Hour of the day
-cod_data$shour = sin(2*pi*(cod_data$hour/24)) # this matches
+cod_data$shour = sin(2*pi*(cod_data$hour/24)) 
 cod_data$chour = cos(2*pi*(cod_data$hour/24)) 
 
 # Julian Day
@@ -73,6 +78,7 @@ cod_data$cLunar2 = cos(cod_data$lunar2)
 # Presence with Cox Ledge and Mass Bay Data
 
 Full presence mod from caiger et al: Y + S + H + D + L1 + L2 +J + rW + S:J
+(Caiger et al. evaluated timing of cod grunts with a longer time-series dataset in Mass Bay)
 
 ```{r}
 library(lme4)
@@ -110,12 +116,6 @@ summary(codModNB_rSiteIS)# change to cod mod once run
 # AIC suggests that the simplest model - without region is the best fit
 AIC(codMod, codMod_nosite, codMod_rSite, codModNB_rSiteNested, codModNB_rSiteIS)
 
-# this code came from class notes, but don't remember which lesson
-cod_data$P_resid = residuals(codMod, type = "pearson")
-cod_data$d_resid = residuals(codMod, type = "deviance")
-
-sum(cod_data$P_resid)/df.residual(codMod_nosite)
-# does this mean that there is a significant difference in presence, or significant difference in covariates?
 
 ```
 
@@ -192,96 +192,23 @@ Rate model: model evaluated predictors for the rate zero-inf terms separately. T
 # does not include region yet, because of singularity with site
 # also does not include random effect of week. 
 
-library(pscl)
-zip1 = zeroinfl(n_grunts ~ SpawnSeason + region + shour + chour + sLunar + cLunar + sday + cday + site:J |
-                  SpawnSeason + region + shour + chour + sLunar + cLunar + sday + cday + site:J, 
-                dist = "poisson", link = "logit", data = cod_data)
-summary(zip1)
-
-#this was computationally singular? 
-Nb1 = zeroinfl(n_grunts ~ SpawnSeason + region + shour + chour + sLunar + cLunar + sday + cday + site:J |
-                  SpawnSeason + region + shour + chour + sLunar + cLunar + sday + cday + site:J, 
-                dist = "negbin", link = "logit", data = cod_data)
-summary(Nb1)
-
-# but the likelihood is much higher for the Neg Bin that only gave coefficient estimates
-library(lmtest)
-lrtest(zip1, Nb1)
-
-
-```
-
-## Model each region separately and compare best models
-
-Because I am not sure the above method is appropriate for evaluating whether the environmental correlates differ between the two regions, I modeled each region separately. 
-
-This workflow leads to the same final model for each region. This adds some confirmation to me that there likely is no significant difference between the timing of spawning in the two regions. 
-
-```{r}
-CoxLedge = cod_data %>%
-  filter(region == 'CoxLedge')
-
-MassBay = cod_data %>%
-  filter(region == "MassBay")
-
-# Cox ledge data
-
-# Presence
-codModCL = glm(presence ~ SpawnSeason + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 + sday + cday,
-                 data = CoxLedge, family = binomial(link = "logit"))
-summary(codModCL)
-drop1(codModCL)
-
-# Rate
-# Full model - no region 
-RateMod_fullCL = glm(n_grunts ~ SpawnSeason + shour + chour + sLunar + cLunar + sLunar2 + cLunar2, 
-               data = CoxLedge, poisson(link = "log"))
-summary(RateMod_fullCL)
-
-# same model but negative binomial 
-library(MASS)
-RateModNB_fullCL = glm.nb(n_grunts ~ SpawnSeason + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-                   data = CoxLedge)
-summary(RateModNB_fullCL)
-
-# AIC suggests the neg bin is a much better fit
-AIC(RateMod_fullCL, RateModNB_fullCL)
-
-drop1(RateModNB_fullCL)
-
+# library(pscl)
+# zip1 = zeroinfl(n_grunts ~ SpawnSeason + region + shour + chour + sLunar + cLunar + sday + cday + site:J |
+#                   SpawnSeason + region + shour + chour + sLunar + cLunar + sday + cday + site:J, 
+#                 dist = "poisson", link = "logit", data = cod_data)
+# summary(zip1)
+# 
+# #this was computationally singular? 
+# Nb1 = zeroinfl(n_grunts ~ SpawnSeason + region + shour + chour + sLunar + cLunar + sday + cday + site:J |
+#                   SpawnSeason + region + shour + chour + sLunar + cLunar + sday + cday + site:J, 
+#                 dist = "negbin", link = "logit", data = cod_data)
+# summary(Nb1)
+# 
+# # but the likelihood is much higher for the Neg Bin that only gave coefficient estimates
+# library(lmtest)
+# lrtest(zip1, Nb1)
 
 
 ```
 
-# Mass Bay data
-
-```{r}
-
-# Presence
-codModMB = glm(presence ~ SpawnSeason + site + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 + sday + cday,
-                 data = MassBay, family = binomial(link = "logit"))
-summary(codModMB)
-
-drop1(codModMB)
-
-# Rate
-# Full model - no region 
-RateMod_fullMB = glm(n_grunts ~ SpawnSeason + site + shour + chour + sLunar + cLunar + sLunar2 + cLunar2, 
-               data = MassBay, poisson(link = "log"))
-summary(RateMod_fullMB)
-
-# same model but negative binomial 
-library(MASS)
-RateModNB_fullMB = glm.nb(n_grunts ~ SpawnSeason + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-                   data = MassBay)
-summary(RateModNB_fullMB)
-
-# AIC suggests the neg bin is a much better fit
-AIC(RateMod_fullMB, RateModNB_fullMB)
-
-drop1(RateModNB_fullMB)
-
-
-
-```
 

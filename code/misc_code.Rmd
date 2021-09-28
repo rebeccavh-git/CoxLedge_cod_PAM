@@ -1,0 +1,98 @@
+---
+title: "R Notebook"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+Misc cod model code
+
+
+
+```{r}
+
+# Calculating and comparing residuals
+
+# this code came from class notes, but don't remember which lesson
+cod_data$P_resid = residuals(codMod, type = "pearson")
+cod_data$d_resid = residuals(codMod, type = "deviance")
+
+sum(cod_data$P_resid)/df.residual(codMod_nosite)
+# does this mean that there is a significant difference in presence, or significant difference in covariates?
+
+
+```
+
+## Model each region separately and compare best models
+
+Because I am not sure the above method is appropriate for evaluating whether the environmental correlates differ between the two regions, I modeled each region separately. 
+
+This workflow leads to the same final model for each region. This adds some confirmation to me that there likely is no significant difference between the timing of spawning in the two regions. 
+
+```{r}
+CoxLedge = cod_data %>%
+  filter(region == 'CoxLedge')
+
+MassBay = cod_data %>%
+  filter(region == "MassBay")
+
+# Cox ledge data
+
+# Presence
+codModCL = glm(presence ~ SpawnSeason + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 + sday + cday,
+                 data = CoxLedge, family = binomial(link = "logit"))
+summary(codModCL)
+drop1(codModCL)
+
+# Rate
+# Full model - no region 
+RateMod_fullCL = glm(n_grunts ~ SpawnSeason + shour + chour + sLunar + cLunar + sLunar2 + cLunar2, 
+               data = CoxLedge, poisson(link = "log"))
+summary(RateMod_fullCL)
+
+# same model but negative binomial 
+library(MASS)
+RateModNB_fullCL = glm.nb(n_grunts ~ SpawnSeason + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                   data = CoxLedge)
+summary(RateModNB_fullCL)
+
+# AIC suggests the neg bin is a much better fit
+AIC(RateMod_fullCL, RateModNB_fullCL)
+
+drop1(RateModNB_fullCL)
+
+
+
+```
+
+# Mass Bay data
+
+```{r}
+
+# Presence
+codModMB = glm(presence ~ SpawnSeason + site + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 + sday + cday,
+                 data = MassBay, family = binomial(link = "logit"))
+summary(codModMB)
+
+drop1(codModMB)
+
+# Rate
+# Full model - no region 
+RateMod_fullMB = glm(n_grunts ~ SpawnSeason + site + shour + chour + sLunar + cLunar + sLunar2 + cLunar2, 
+               data = MassBay, poisson(link = "log"))
+summary(RateMod_fullMB)
+
+# same model but negative binomial 
+library(MASS)
+RateModNB_fullMB = glm.nb(n_grunts ~ SpawnSeason + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                   data = MassBay)
+summary(RateModNB_fullMB)
+
+# AIC suggests the neg bin is a much better fit
+AIC(RateMod_fullMB, RateModNB_fullMB)
+
+drop1(RateModNB_fullMB)
+
+
+
+```
