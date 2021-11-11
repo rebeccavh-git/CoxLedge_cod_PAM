@@ -1,0 +1,280 @@
+---
+title: "historical_cod_data"
+author: "Becca Van Hoeck"
+date: "3/9/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Loading packages
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+library(lunar)
+library(tidyr)
+```
+
+## Load Cox Ledge Data
+
+```{r}
+cod = read.csv('data/codCox13_14_final.csv', header = TRUE)
+
+# remove any data not from channel 9
+cod[cod$Channel != 9,] = NA
+cod = na.omit(cod)
+
+
+# paste date and time into a single lubridate datetime
+cod$DateTime = paste(cod$BeginDate, cod$BeginClockTime, sep = " ") 
+cod$DateTime = ymd_hms(cod$DateTime, tz = "EST") 
+
+
+#assign spawning season
+cod$SpawnSeason = case_when(
+  year(cod$DateTime) == 2013 ~ "H_YR1", 
+  year(cod$DateTime) == 2014 & month(cod$DateTime) == 1 | month(cod$DateTime) == 2 ~ "H_YR1",
+  year(cod$DateTime) == 2014 & month(cod$DateTime) == 10 | month(cod$DateTime) == 11 | month(cod$DateTime) == 12 ~ "H_YR2",
+  year(cod$DateTime) == 2015 ~ "H_YR2")
+
+# lunar phase for visulization of observed data
+cod$lunarphase = lunar.phase(cod$DateTime)
+
+```
+
+## Seasonal Patterns
+
+Cox Ledge 2013 & 2014 spawning season pass minimum grunt criteria
+
+```{r}
+gruntperday = cod %>% 
+  group_by(SpawnSeason, date = date(cod$DateTime)) %>%
+  summarise(n_grunts = n())
+
+gruntperday$month = month(gruntperday$date)
+gruntperday$month = factor(gruntperday$month, levels = c("10","11","12","1"))
+
+gruntperday$day = day(gruntperday$date)
+
+#confirm each spawning season has average >5 grunts per day
+gruntperday %>% 
+  group_by(SpawnSeason, month(date)) %>% 
+  summarise(mean_call = mean(n_grunts))
+
+# each spawning season has grunts on >10 days
+confirm_ndays = gruntperday %>%
+  group_by(SpawnSeason) %>%
+  summarise(ndays = n())
+
+# confirm each spawning season has grunts on >2% of hours
+SS_min_hours = ((30+31+31)*24)*0.02 # ndays included* hours/day*2%
+hrs_w_grunt = cod %>%
+  group_by(SpawnSeason = cod$SpawnSeason, year = year(cod$DateTime), month = month(cod$DateTime), date = date(cod$DateTime),
+           hour = hour(cod$DateTime)) %>%
+  summarise(n_grunts = n()) %>%
+  group_by(SpawnSeason) %>%
+  summarise(n_hours = n())
+
+hrs_w_grunt > SS_min_hours
+
+ggplot(data = gruntperday, aes(x = day, y = n_grunts))+ theme_bw()+
+  geom_col()+
+  scale_x_continuous(breaks = c(1,7,14,21,28), limits = c(1,31))+
+  facet_grid(rows = vars(SpawnSeason), cols = vars(month))+
+  xlab("Day of the Month")+ ylab("Observed number of grunts")+
+  ggtitle("Seasonal Patterns in Sound Production")+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        title = element_text(size = 14), 
+        strip.text = element_text(size = 12))
+
+```
+
+# Exploring daily patterns
+
+```{r}
+gruntperhr = cod %>%
+  group_by(SpawnSeason = cod$SpawnSeason, year = year(cod$DateTime), month = month(cod$DateTime), date = date(cod$DateTime),
+           hour = hour(cod$DateTime)) %>%
+  summarise(n_grunts = n()) %>%
+  group_by(SpawnSeason, year, month, hour) %>%
+  summarise(avg_hr = mean(n_grunts), stdev = sd(n_grunts))
+
+gruntperhr$month = factor(gruntperhr$month, levels = c("10","11","12","1"))
+
+ggplot(data = gruntperhr, aes(x = hour, y = avg_hr))+ theme_bw()+
+  geom_col()+
+  geom_errorbar(aes(ymin = avg_hr, ymax = avg_hr+stdev, width = 0.2))+
+  facet_grid(rows = vars(SpawnSeason), cols = vars(month))+
+  xlab("Hour of the the day")+ ylab("Average number of grunts per hour")+
+  ggtitle("Daily Patterns in Sound Production")+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        title = element_text(size = 14), 
+        strip.text = element_text(size = 12))
+
+# total n_grunts each hour across all seasons and years
+ggplot(data=cod, aes(x=hour(DateTime)))+ theme_bw()+
+  geom_histogram(fill='grey',color='black', breaks=c(1:24))+
+  coord_polar(start = 0)+
+  scale_x_continuous(name = "Hour", breaks = c(6,12,18,24), labels = c("6", "12", "18","24"))+
+  scale_y_continuous(name = "Number of grunts observed", limits = c(0,80))+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12))
+
+# grunt rate each hour across all seasons and years
+
+
+```
+
+## Lunar Cycle
+
+```{r}
+
+# total observed call across lunar phases
+# concerned with how different this looks depending on #bins
+ggplot(data=cod, aes(x = lunarphase))+ theme_bw()+
+  geom_histogram(fill='grey',color='black', bins = 20)+
+  coord_polar(start = 0)+
+  scale_y_continuous(name = "Number of grunts observed",limits = c(-5,100))+
+  scale_x_continuous(breaks = c(0,pi/2, pi, 3*pi/2),labels = c("New", "Waxing","Full","Waning"))+
+  xlab("Lunar Phase")+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12))
+
+# lunar association each spawn season
+ggplot(data=cod, aes(x = lunarphase))+ theme_bw()+
+  geom_histogram(fill='grey',color='black', bins = 20)+
+  coord_polar(start = 0)+
+  scale_y_continuous(name = "Number of grunts observed",limits = c(-5,100))+
+  scale_x_continuous(breaks = c(0,pi/2, pi, 3*pi/2),labels = c("New", "Waxing","Full","Waning"))+
+  xlab("Lunar Phase")+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12))
+
+
+# add one for grunt rate?
+
+```
+
+# Assemble dataframe for model
+
+```{r}
+DateTime1 = seq(ymd_hm("2013-10-01 00:00"), ymd_hm("2014-01-31 23:00"), by = "hour")
+DateTime = as.data.frame(DateTime1)
+colnames(DateTime) = "DateTime"
+DateTime2 = seq(ymd_hm("2014-10-01 00:00"), ymd_hm("2015-01-31 23:00"), by = "hour")
+DateTime2 = as.data.frame(DateTime2)
+colnames(DateTime2) ="DateTime"
+
+DateTime = rbind(DateTime,DateTime2)
+cod_data = as.data.frame(DateTime)
+
+# cod hourly grunt rate
+hourly_presence = cod %>%
+  group_by(Month = month(cod$DateTime), date = date(cod$DateTime), hour = hour(cod$DateTime)) %>%
+  summarise(n_grunts = n())
+hourly_presence$DateTime = ymd_h(paste(hourly_presence$date, hourly_presence$hour))
+
+# cod hourly grunt presence
+cod_data = left_join(cod_data,hourly_presence[,c(4,5)], by = "DateTime")
+cod_data$n_grunts[is.na(cod_data$n_grunts)] = 0
+cod_data$presence = cod_data$n_grunts
+cod_data$presence[cod_data$presence >= 1] = 1
+cod_data$presence[is.na(cod_data$presence)] = 0
+
+# Natural cycles
+cod_data$year = year(cod_data$DateTime)
+cod_data$month = month(cod_data$DateTime)
+cod_data$day = day(cod_data$DateTime)
+cod_data$day = formatC(cod_data$day, width = 2, format = "d", flag = "0")
+cod_data$hour = hour(cod_data$DateTime)
+
+# lunar data
+cod_data$lunarphase = lunar.phase(cod_data$DateTime, shift = 0)
+cod_data$lunar4 = lunar.phase(cod_data$DateTime, name = 4)
+cod_data$lunar8 = lunar.phase(cod_data$DateTime, name = 8)
+#cod_data$semilunar = lunar.phase(cod_data$DateTime)
+
+cod_data$lunar2 = cod_data$lunarphase
+cod_data$lunar2[cod_data$lunar2 > pi] = cod_data$lunar2[cod_data$lunar2 >pi]-pi
+cod_data$lunar2 = 2*cod_data$lunar2
+
+# adding factor for spawning season
+cod_data$SpawnSeason = case_when(
+  year(cod_data$DateTime) == 2013 ~ "H_YR1", 
+  year(cod_data$DateTime) == 2014 & month(cod_data$DateTime) == 1 | month(cod_data$DateTime) == 2 ~ "H_YR1",
+  year(cod_data$DateTime) == 2014 & month(cod_data$DateTime) == 10 | month(cod_data$DateTime) == 11 | month(cod_data$DateTime) == 12 ~ "H_YR2",
+  year(cod_data$DateTime) == 2015 ~ "H_YR2")
+cod_data$SpawnSeason = factor(cod_data$SpawnSeason)
+```
+
+## Temperature data
+
+```{r}
+
+# temp_2013 = read.csv("data/buoy_data_2013.csv", header = TRUE)
+# temp_2014 = read.csv("data/buoy_data_2014.csv", header = TRUE)
+# temp_2015 = read.csv("data/buoy_data_2015.csv", header = TRUE)
+# temp_2019 = read.csv("data/buoy_data_2019.csv", header = TRUE)
+
+# #2013
+# temp_2013$DateTime = ymd_h(paste(temp_2013$YY,temp_2013$MM, temp_2013$DD, temp_2013$hh))
+# hour_temp13 = temp_2013 %>%
+#   group_by(DateTime) %>%
+#   summarize(avg_TempC = mean(WTMP_degC)) %>%
+#   filter(DateTime > "2013-10-31" & DateTime < "2013-12-31 23:00:00")
+# 
+# #2014
+# temp_2014$DateTime = ymd_h(paste(temp_2014$X.YY,temp_2014$MM, temp_2014$DD, temp_2014$hh))
+# hour_temp14 = temp_2014 %>%
+#   group_by(DateTime) %>%
+#   summarize(avg_TempC = mean(WTMP_degC)) %>%
+#   filter(DateTime > "2014-01-01" & DateTime < "2014-12-31")
+# colnames(temp_2014) = c("YY","MM","DD","hh","mm","WVHT_m","DPD_sec","APD_sec" ,"MWD_degT","WTMP_degC","DateTime")
+# 
+# #2015
+# temp_2015$DateTime = ymd_h(paste(temp_2015$X.YY,temp_2015$MM, temp_2015$DD, temp_2015$hh))
+# hour_temp15 = temp_2015 %>%
+#   group_by(DateTime) %>%
+#   summarize(avg_TempC = mean(WTMP_degC)) %>%
+#   filter(DateTime > "2015-01-01" & DateTime < "2015-12-31")
+# colnames(temp_2015) = c("YY","MM","DD","hh","mm","WVHT_m","DPD_sec","APD_sec" ,"MWD_degT","WTMP_degC","DateTime")
+# 
+# temp = rbind(hour_temp13,hour_temp14,hour_temp15)
+# 
+# cod_data = left_join(cod_data, temp, by = "DateTime")
+# #write.csv(cod_data, "data/cod_data_05-26-21.csv")
+# 
+# 
+# temp$Year = year(temp$DateTime)
+# temp$Month = month(temp$DateTime)
+# 
+# summary_temp = temp %>% 
+#   group_by(Year, Month) %>%
+#   summarize(mean_temp = mean(avg_TempC))
+
+```
+
+## Final dataframe prep
+
+```{r}
+
+# identify julian day
+yearDay = yday(cod_data$DateTime)
+yearWeek = week(cod_data$DateTime)
+
+
+cod_data = cod_data %>%
+  mutate(region = "CoxLedge", site = "COX01", siteY = paste(site,year, sep = "_"), J = yearDay,
+           yearDay = paste(year, yearDay, sep = "_"), wk = yearWeek, yearweek = paste(year, yearWeek, sep = "_"))
+
+write.csv(cod_data, "data/codCoxModelData.csv")
+
+
+```
+

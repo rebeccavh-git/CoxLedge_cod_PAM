@@ -1,0 +1,251 @@
+---
+title: "CoxLedge_cod_model"
+author: "Becca Van Hoeck"
+date: "10/14/2021"
+output: html_document
+---
+Research Questions: 
+
+1. Is the timing of Atlantic cod spawning-associated vocalization, including grunt presence and rate, associated with environmental variables? 
+2. Do these environmental correlates fall within the variation observed in Massachusetts Bay? 
+
+Data Source:
+- Fixed station passive acoustic monitoring data from spawning season of 2013 and 2014 at 1 site on Cox Ledge 
+- Data are summarized by cod grunt presence and grunt rate per hour during the spawning season.
+- Massachusetts Bay data spans 10 years and spawning associations are previously published
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load packages
+
+```{r}
+
+library(lunar)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(ggplot2)
+library(lme4)
+library(lmtest)
+library(pscl)
+library(MuMIn)
+library(emmeans)
+library(circular)
+library(doBy) # for summaryBy - can I use dplyr/ group_by instead?
+
+install.packages("doBy")
+
+```
+
+# Load data
+now just modeling cox ledge data and testing whether the peak dates/association falls within the range of mass bay
+```{r}
+cox = read.csv("data/codCoxModelData.csv", header = TRUE)
+
+```
+
+# Creating sin and cosine variables
+
+```{r}
+# Hour of the day
+cox$shour = sin(2*pi*(cox$hour/24)) 
+cox$chour = cos(2*pi*(cox$hour/24)) 
+
+# Julian Day
+cox$sday = sin(2*pi*(cox$J/365))
+cox$cday = cos(2*pi*(cox$J/365))
+  
+# Lunar cycle  
+cox$sLunar = sin(cox$lunarphase) 
+cox$cLunar = cos(cox$lunarphase)
+
+#Semi lunar cycle
+cox$sLunar2 = sin(cox$lunar2)
+cox$cLunar2 = cos(cox$lunar2)
+
+cox$SpawnSeason = factor(cox$SpawnSeason)
+
+```
+
+# Explore zeros
+
+```{r}
+mean(cox$n_grunts) # mean n_grunts = 0.18
+
+cox %>% summarise(sum(n_grunts == 0)/n()) # 96.3% zeros
+
+ggplot(cox, aes(x = n_grunts))+
+  geom_bar()
+
+max(cox$n_grunts)
+
+# mean day of grunt presence
+codPresence = cox[cox$presence == 1,]
+meanDay = mean(codPresence$J)
+
+
+```
+
+# Mixture model
+
+Questions: 
+1. Is this model selection work flow (based on model summary/predictor significance) sufficient?
+2. How to choose best model when AIC values are so similar
+
+```{r}
+### Global Model
+
+# Zero-inflated Poisson: GLobal Model
+Zip1 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "poisson", link = "logit", data = cox)
+summary(Zip1)
+
+# Zero-inflated negative binomial: Global Model
+Zinb1 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+summary(Zinb1)
+
+# likelihood ratio test between the poisson and neg bin models
+# proceed with negative binomial 
+lrtest(Zip1, Zinb1) 
+
+### Test parameters step-wise and conduct likelihood ratio tests
+
+# Remove hour from count model
+Zinb2 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+summary(Zinb2)
+lrtest(Zinb1, Zinb2)
+
+# same as 1, but removed Spawn Season from zero process
+Zinb3 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + shour +chour + sLunar + cLunar + sLunar2 + cLunar2 |
+                  sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+summary(Zinb3)
+lrtest(Zinb1, Zinb3)
+# not different from Zinb1
+
+
+model.sel(Zinb1, Zinb2, Zinb3)
+
+
+```
+
+## Hurdle Model
+
+Sticking with mixture model, because I don't think that the process of producing counts is different than the one producing zeros
+Also, hurdle model is a much worse fit
+```{r}
+Hnb1 = hurdle(n_grunts ~ SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+summary(Hnb1)
+
+model.sel(Zinb1, Zinb2, Zinb3, Hnb1)
+
+
+```
+
+# Final model summary & estimated marginal means
+
+Questions: 
+1. How to extract predictions from the zero and count processes of the model
+2. Estimate marginal means: Do I hold covariates at the mean of observed grunts? 
+   (ie. mean hour of the day is 12pm, but mean hour of observed grunts may be 4pm?)
+
+```{r}
+
+codMod = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+summary(codMod)
+
+
+## Estimated marginal means
+# need to follow the emmeans vignettes to be sure the math behind these params is correct
+# confirm mode and whether should use lin.predict = TRUE?
+emm_day_pres = emmeans(codMod, ~ sday + cday, mode = "zero")
+emm_day_rate = emmeans(codMod, ~ sday + cday, mode = "count")
+
+# interpret how they calculated emmeans on circular variables. Set others to their mean and calculated effects?
+
+# Micah's function to calculate circular variables from dataframe input
+make_circ<-function(d){
+    out<-d
+    namez<-names(d)
+    if("hour"%in%namez){
+      out$shour<-sin(2*pi*(out$hour/24))
+      out$chour<-cos(2*pi*(out$hour/24))
+    }
+    if("day"%in%namez){
+      out$sday<-sin(2*pi*(out$day/365))
+      out$cday<-cos(2*pi*(out$day/365))
+    }
+    if("Lunar"%in%namez){
+      out$sLunar<-sin(out$Lunar)
+      out$cLunar<-cos(out$Lunar)
+      out$Lunar2<-out$Lunar
+      out$Lunar2[out$Lunar2>pi]<-out$Lunar2[out$Lunar2>pi]-pi
+      out$Lunar2<-2*out$Lunar2
+      out$sLunar2<-sin(out$Lunar2) #SEMI-LUNAR
+      out$cLunar2<-cos(out$Lunar2) #SEMI-LUNAR
+    }
+    return(out)
+  }
+
+## Diel Estimated marginal means following Micah's code 
+# Day = 309 (mean day of presence), Full moon
+nHour = expand.grid(SpawnSeason=as.character(unique(cox$SpawnSeason)), day=309, Lunar=pi, hour=0:23)
+nHour = make_circ(nDay)
+nHour$presence = predict(codMod, newdata=nHour, type='zero')
+nHour$rate = predict(codMod, newdata=nHour, type='count') # dont need rate here bc it's not in the model
+emm_h = summaryBy(cbind(presence,rate)~hour,data=nDay,FUN=mean,keep.names=TRUE)
+
+## Lunar EMM
+# why only 1 lunar effect and not two separate for semi-lunar? would predictions be the same, since it's the same cycle?
+nLunar = expand.grid(SpawnSeason=as.character(unique(cox$SpawnSeason)), day=309, Lunar=seq(0,2*pi,length=16),hour=0)
+nLunar = make_circ(nLunar)
+nLunar$presence = predict(codMod, newdata=nLunar, type='zero')
+nLunar$rate = predict(codMod, newdata=nLunar, type='count')
+emm_l<-summaryBy(cbind(presence,rate)~Lunar,data=nLunar,FUN=mean,keep.names=TRUE) 
+
+## Seasonal effect 
+# current plot of presence look very weird (why peak in October??)
+nDay = expand.grid(SpawnSeason=as.character(unique(cox$SpawnSeason)),day=c(274:365,1:31),Lunar=pi,hour=0)
+nDay = make_circ(nDay)
+nDay$presence = predict(codMod, newdata=nDay, type='zero')
+nDay$rate = predict(codMod, newdata=nDay, type='count')
+emm_j<-summaryBy(cbind(presence,rate)~day,data=nDay,FUN=mean,keep.names=TRUE)
+#emm_j$edate<-as.Date('2012-12-31')+emm_j$J
+
+
+```
+
+## Plot EM Means with ggplot
+
+```{r}
+
+
+
+```
+
+## Summarize mass bay variation
+
+What am I trying to do? 
+
+Summarize the mean effect of each variable from the Mass Bay model and the confidence around that estimate
+
+```{r}
+
+load("data/gsub.rdat")
+
+# recreate best mass bay model: presence
+# BUT THIS WAS A MODEL AVERAGE? HOW TO GET THEIR OUTOUT
+
+
+```
