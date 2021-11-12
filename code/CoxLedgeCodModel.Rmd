@@ -7,7 +7,7 @@ output: html_document
 Research Questions: 
 
 1. Is the timing of Atlantic cod spawning-associated vocalization, including grunt presence and rate, associated with environmental variables? 
-2. Do these environmental correlates fall within the variation observed in Massachusetts Bay? 
+2. Do these environmental associations fall within the variation observed in Massachusetts Bay? 
 
 Data Source:
 - Fixed station passive acoustic monitoring data from spawning season of 2013 and 2014 at 1 site on Cox Ledge 
@@ -157,6 +157,7 @@ Questions:
 1. How to extract predictions from the zero and count processes of the model
 2. Estimate marginal means: Do I hold covariates at the mean of observed grunts? 
    (ie. mean hour of the day is 12pm, but mean hour of observed grunts may be 4pm?)
+3. Is there a confidence interval around the estimated marginal means?
 
 ```{r}
 
@@ -229,14 +230,22 @@ emm_j<-summaryBy(cbind(presence,rate)~day,data=nDay,FUN=mean,keep.names=TRUE)
 ## Plot EM Means with ggplot
 
 ```{r}
+# plots in base R
 
+# Diel
+plot(emm_h$hour, emm_h$presence)
+plot(emm_h$hour, emm_h$rate)
+#Lunar
+plot(emm_l$Lunar, emm_l$presence)
+plot(emm_l$Lunar, emm_l$rate)
+# Seasonal
+plot(emm_j$day, emm_j$presence)
+plot(emm_j$day, emm_j$rate)
 
 
 ```
 
 ## Summarize mass bay variation
-
-What am I trying to do? 
 
 Summarize the mean effect of each variable from the Mass Bay model and the confidence around that estimate
 
@@ -249,3 +258,14 @@ load("data/gsub.rdat")
 
 
 ```
+
+## Plot comparison of Cox Ledge and Mass Bay
+
+```{r}
+
+
+
+```
+
+
+
