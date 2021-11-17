@@ -35,8 +35,6 @@ library(emmeans)
 library(circular)
 library(doBy) # for summaryBy - can I use dplyr/ group_by instead?
 
-install.packages("doBy")
-
 ```
 
 # Load data
@@ -146,8 +144,14 @@ Hnb1 = hurdle(n_grunts ~ SpawnSeason + sday + cday + shour + chour + sLunar + cL
                   dist = "negbin", link = "logit", data = cox)
 summary(Hnb1)
 
-model.sel(Zinb1, Zinb2, Zinb3, Hnb1)
+# using best model
+Hnb2 = hurdle(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+summary(codMod)
 
+#model.sel(Zinb1, Zinb2, Zinb3, Hnb1)
+model.sel(Zinb4, Hnb2)
 
 ```
 
@@ -202,10 +206,10 @@ make_circ<-function(d){
 ## Diel Estimated marginal means following Micah's code 
 # Day = 309 (mean day of presence), Full moon
 nHour = expand.grid(SpawnSeason=as.character(unique(cox$SpawnSeason)), day=309, Lunar=pi, hour=0:23)
-nHour = make_circ(nDay)
+nHour = make_circ(nHour)
 nHour$presence = predict(codMod, newdata=nHour, type='zero')
 nHour$rate = predict(codMod, newdata=nHour, type='count') # dont need rate here bc it's not in the model
-emm_h = summaryBy(cbind(presence,rate)~hour,data=nDay,FUN=mean,keep.names=TRUE)
+emm_h = summaryBy(cbind(presence,rate)~hour,data=nHour,FUN=mean,keep.names=TRUE)
 
 ## Lunar EMM
 # why only 1 lunar effect and not two separate for semi-lunar? would predictions be the same, since it's the same cycle?
@@ -267,5 +271,80 @@ load("data/gsub.rdat")
 
 ```
 
+## Backwards step-wise model selection: 
 
+Zinb4 has lowest AIC and highest likelihood, but is generally indistinguishable from Zinb11 and Zinb8
+Zinb4 is the same model selected as best as above
+
+```{r}
+
+# Count process:
+
+Zinb1 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+
+Zinb2 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + shour + chour + sLunar + cLunar |
+                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+lrtest(Zinb1, Zinb2) 
+
+Zinb3 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + shour + chour + sLunar2 + cLunar2 |
+                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+lrtest(Zinb1, Zinb3) 
+
+Zinb4 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+lrtest(Zinb1, Zinb4) 
+
+Zinb5 = zeroinfl(n_grunts ~ SpawnSeason + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+lrtest(Zinb4, Zinb5) 
+
+Zinb6 = zeroinfl(n_grunts ~ sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+lrtest(Zinb4, Zinb6) 
+
+
+model.sel(Zinb1, Zinb2, Zinb3, Zinb4, Zinb5, Zinb6)
+
+# Zero process
+Zinb7 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar,
+                  dist = "negbin", link = "logit", data = cox)
+lrtest(Zinb4, Zinb7) 
+
+Zinb8 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + sday + cday + shour + chour + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+lrtest(Zinb4, Zinb8) 
+model.sel(Zinb4, Zinb8) # these are indistinguishable, which one to use moving forward?
+
+Zinb9 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+lrtest(Zinb4, Zinb9) 
+
+Zinb10 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+lrtest(Zinb4, Zinb10) 
+
+Zinb11 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
+                  sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+lrtest(Zinb4, Zinb11) 
+
+Zinb12 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
+                  sday + cday + shour + chour + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+model.sel(Zinb4, Zinb8, Zinb11, Zinb12) 
+
+model.sel(Zinb1, Zinb2, Zinb3, Zinb4, Zinb5, Zinb6, Zinb7, Zinb8, Zinb9, Zinb10, Zinb11, Zinb12)
+
+```
 
