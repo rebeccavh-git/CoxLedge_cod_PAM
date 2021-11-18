@@ -134,6 +134,83 @@ model.sel(Zinb1, Zinb2, Zinb3)
 
 ```
 
+## Backwards step-wise model selection: 
+
+Zinb4 has lowest AIC and highest likelihood, but is generally indistinguishable from Zinb11 and Zinb8
+Zinb4 is the same model selected as best as above
+
+```{r}
+
+# Count process:
+
+Zinb1 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+
+Zinb2 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + shour + chour + sLunar + cLunar |
+                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+lrtest(Zinb1, Zinb2) 
+
+Zinb3 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + shour + chour + sLunar2 + cLunar2 |
+                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+lrtest(Zinb1, Zinb3) 
+
+Zinb4 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+lrtest(Zinb1, Zinb4) 
+
+Zinb5 = zeroinfl(n_grunts ~ SpawnSeason + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+lrtest(Zinb4, Zinb5) 
+
+Zinb6 = zeroinfl(n_grunts ~ sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+lrtest(Zinb4, Zinb6) 
+
+
+model.sel(Zinb1, Zinb2, Zinb3, Zinb4, Zinb5, Zinb6)
+
+# Zero process
+Zinb7 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar,
+                  dist = "negbin", link = "logit", data = cox)
+lrtest(Zinb4, Zinb7) 
+
+Zinb8 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + sday + cday + shour + chour + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+lrtest(Zinb4, Zinb8) 
+model.sel(Zinb4, Zinb8) # these are indistinguishable, which one to use moving forward?
+
+Zinb9 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+lrtest(Zinb4, Zinb9) 
+
+Zinb10 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+lrtest(Zinb4, Zinb10) 
+
+Zinb11 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
+                  sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+lrtest(Zinb4, Zinb11) 
+
+Zinb12 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
+                  sday + cday + shour + chour + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+model.sel(Zinb4, Zinb8, Zinb11, Zinb12) 
+
+model.sel(Zinb1, Zinb2, Zinb3, Zinb4, Zinb5, Zinb6, Zinb7, Zinb8, Zinb9, Zinb10, Zinb11, Zinb12)
+
+```
+
 ## Hurdle Model
 
 Sticking with mixture model, because I don't think that the process of producing counts is different than the one producing zeros
@@ -271,80 +348,4 @@ load("data/gsub.rdat")
 
 ```
 
-## Backwards step-wise model selection: 
-
-Zinb4 has lowest AIC and highest likelihood, but is generally indistinguishable from Zinb11 and Zinb8
-Zinb4 is the same model selected as best as above
-
-```{r}
-
-# Count process:
-
-Zinb1 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-
-Zinb2 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + shour + chour + sLunar + cLunar |
-                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-lrtest(Zinb1, Zinb2) 
-
-Zinb3 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + shour + chour + sLunar2 + cLunar2 |
-                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-lrtest(Zinb1, Zinb3) 
-
-Zinb4 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-lrtest(Zinb1, Zinb4) 
-
-Zinb5 = zeroinfl(n_grunts ~ SpawnSeason + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-lrtest(Zinb4, Zinb5) 
-
-Zinb6 = zeroinfl(n_grunts ~ sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-lrtest(Zinb4, Zinb6) 
-
-
-model.sel(Zinb1, Zinb2, Zinb3, Zinb4, Zinb5, Zinb6)
-
-# Zero process
-Zinb7 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar,
-                  dist = "negbin", link = "logit", data = cox)
-lrtest(Zinb4, Zinb7) 
-
-Zinb8 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + sday + cday + shour + chour + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-lrtest(Zinb4, Zinb8) 
-model.sel(Zinb4, Zinb8) # these are indistinguishable, which one to use moving forward?
-
-Zinb9 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-lrtest(Zinb4, Zinb9) 
-
-Zinb10 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-lrtest(Zinb4, Zinb10) 
-
-Zinb11 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
-                  sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-lrtest(Zinb4, Zinb11) 
-
-Zinb12 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
-                  sday + cday + shour + chour + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-model.sel(Zinb4, Zinb8, Zinb11, Zinb12) 
-
-model.sel(Zinb1, Zinb2, Zinb3, Zinb4, Zinb5, Zinb6, Zinb7, Zinb8, Zinb9, Zinb10, Zinb11, Zinb12)
-
-```
 
