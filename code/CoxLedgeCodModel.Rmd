@@ -110,26 +110,27 @@ summary(Zinb1)
 # likelihood ratio test between the poisson and neg bin models
 # proceed with negative binomial 
 lrtest(Zip1, Zinb1) 
+AIC(Zip1, Zinb1)
 
 ### Test parameters step-wise and conduct likelihood ratio tests
 
-# Remove hour from count model
-Zinb2 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-summary(Zinb2)
-lrtest(Zinb1, Zinb2)
-
-# same as 1, but removed Spawn Season from zero process
-Zinb3 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + shour +chour + sLunar + cLunar + sLunar2 + cLunar2 |
-                  sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-summary(Zinb3)
-lrtest(Zinb1, Zinb3)
-# not different from Zinb1
-
-
-model.sel(Zinb1, Zinb2, Zinb3)
+# # Remove hour from count model
+# Zinb2 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
+#                   SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+#                   dist = "negbin", link = "logit", data = cox)
+# summary(Zinb2)
+# lrtest(Zinb1, Zinb2)
+# 
+# # same as 1, but removed Spawn Season from zero process
+# Zinb3 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + shour +chour + sLunar + cLunar + sLunar2 + cLunar2 |
+#                   sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+#                   dist = "negbin", link = "logit", data = cox)
+# summary(Zinb3)
+# lrtest(Zinb1, Zinb3)
+# # not different from Zinb1
+# 
+# 
+# model.sel(Zinb1, Zinb2, Zinb3)
 
 
 ```
@@ -142,10 +143,6 @@ Zinb4 is the same model selected as best as above
 ```{r}
 
 # Count process:
-
-Zinb1 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
 
 Zinb2 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + shour + chour + sLunar + cLunar |
                   SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
@@ -251,8 +248,8 @@ summary(codMod)
 ## Estimated marginal means
 # need to follow the emmeans vignettes to be sure the math behind these params is correct
 # confirm mode and whether should use lin.predict = TRUE?
-emm_day_pres = emmeans(codMod, ~ sday + cday, mode = "zero")
-emm_day_rate = emmeans(codMod, ~ sday + cday, mode = "count")
+#emm_day_pres = emmeans(codMod, ~ sday + cday, mode = "zero")
+#emm_day_rate = emmeans(codMod, ~ sday + cday, mode = "count")
 
 # interpret how they calculated emmeans on circular variables. Set others to their mean and calculated effects?
 
@@ -305,6 +302,11 @@ nDay$rate = predict(codMod, newdata=nDay, type='count')
 emm_j<-summaryBy(cbind(presence,rate)~day,data=nDay,FUN=mean,keep.names=TRUE)
 #emm_j$edate<-as.Date('2012-12-31')+emm_j$J
 
+emm_j$month = c(rep(1,31),rep(10, 31), rep(11,30), rep(12,31))
+emm_j$date = c(1:31,1:31,1:30,1:31)
+emm_j$SSorder = emm_j$day
+emm_j$SSorder[1:31] = emm_j$SSorder[1:31]+365
+
 
 ```
 
@@ -314,14 +316,53 @@ emm_j<-summaryBy(cbind(presence,rate)~day,data=nDay,FUN=mean,keep.names=TRUE)
 # plots in base R
 
 # Diel
-plot(emm_h$hour, emm_h$presence)
-plot(emm_h$hour, emm_h$rate)
+ggplot(data=emm_h, aes(x=hour, y = presence))+ theme_bw()+
+  coord_polar(start = 0)+
+  geom_line(size = 1)+
+  scale_x_continuous(name = "Hour", breaks = c(6,12,18,24), labels = c("6", "12", "18","24"))+
+  scale_y_continuous(name = "Grunt Presence", limits = c(0,1))+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12))
+
+# ggplot(data=emm_h, aes(x=hour, y = rate))+ theme_bw()+
+#   coord_polar(start = 0)+
+#   geom_line(size = 1)+
+#   scale_x_continuous(name = "Hour", breaks = c(6,12,18,24), labels = c("6", "12", "18","24"))+
+#   scale_y_continuous(name = "Grunt Rate", limits = c(0,1))+
+#   theme(axis.title = element_text(size = 14),
+#         axis.text = element_text(size = 12))
+
 #Lunar
-plot(emm_l$Lunar, emm_l$presence)
-plot(emm_l$Lunar, emm_l$rate)
+# the rate association is weird
+ggplot(data=emm_l, aes(x=Lunar, y = presence))+ theme_bw()+
+  coord_polar(start = 0)+
+  geom_line(size = 2)+
+  scale_x_continuous(name = "Lunar cycle", breaks = c(0,pi/2, pi, 3*pi/2),labels = c("New", "Waxing","Full","Waning"))+
+  scale_y_continuous(name = "Grunt Presence", limits = c(0,1))+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12))
+
+ggplot(data=emm_l, aes(x=Lunar, y = rate))+ theme_bw()+
+  coord_polar(start = 0)+
+  geom_line(size = 2)+
+  scale_x_continuous(name = "Lunar cycle", breaks = c(0,pi/2, pi, 3*pi/2),labels = c("New", "Waxing","Full","Waning"))+
+  scale_y_continuous(name = "Grunt Rate", limits = c(0,110))+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12))
+
 # Seasonal
-plot(emm_j$day, emm_j$presence)
-plot(emm_j$day, emm_j$rate)
+# presence em mean is weird
+ggplot(data=emm_j, aes(x=SSorder, y = presence))+ theme_bw()+
+  geom_line(size = 1)+
+  scale_x_continuous(name = "Month", breaks = c(274,305,335,366), labels = c("Oct", "Nov", "Dec","Jan"))+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12))
+
+ggplot(data=emm_j, aes(x=SSorder, y = rate))+ theme_bw()+
+  geom_line(size = 1)+
+  scale_x_continuous(name = "Month", breaks = c(274,305,335,366), labels = c("Oct", "Nov", "Dec","Jan"))+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12))
 
 
 ```
