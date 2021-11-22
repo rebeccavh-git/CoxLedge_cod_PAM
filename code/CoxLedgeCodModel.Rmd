@@ -4,6 +4,8 @@ author: "Becca Van Hoeck"
 date: "10/14/2021"
 output: html_document
 ---
+https://github.com/rebeccavh-git/CoxLedge_cod_PAM
+
 Research Questions: 
 
 1. Is the timing of Atlantic cod spawning-associated vocalization, including grunt presence and rate, associated with environmental variables? 
@@ -13,6 +15,25 @@ Data Source:
 - Fixed station passive acoustic monitoring data from spawning season of 2013 and 2014 at 1 site on Cox Ledge 
 - Data are summarized by cod grunt presence and grunt rate per hour during the spawning season.
 - Massachusetts Bay data spans 10 years and spawning associations are previously published
+
+Summary of meeting with James: 11/22
+
+- do not use a full step-wise selection procedure - too many models likely spurious relationships
+- Day is likely not best fit by circular variable, center day and switch to parabolic (day + day^2). 
+  Find peak in quadratic and define CI of peak 
+  ** I fit these terms, but it broke the make_circ function** revisit em_means
+- Model selection options:
+  1. reasonable background to move forward with global model based on mass bay study (CI will likely be inflated)
+  2. Use dredge to make all possible models, then remove nested models with indistinguishable AIC, and average models within 5 AIC
+  3. Use biological hypotheses about what we expect to vary between the two regions to establish candidate models
+- Estimated marginal means - good approach
+  - EM means likely has a confidence interval function
+  - revisit to confirm that each variable is held at their mean
+  - revisit Micah's code - consider using EMmeans package directly
+  - gg_predict likely shows confidence interval
+  - otherwise use std errors and link function to generate 95% CI using bootstrapping methods on linear predictors, 
+    and back-transform into predictor space
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -47,6 +68,8 @@ cox = read.csv("data/codCoxModelData.csv", header = TRUE)
 # Creating sin and cosine variables
 
 ```{r}
+cox$SpawnSeason = factor(cox$SpawnSeason)
+
 # Hour of the day
 cox$shour = sin(2*pi*(cox$hour/24)) 
 cox$chour = cos(2*pi*(cox$hour/24)) 
@@ -54,7 +77,9 @@ cox$chour = cos(2*pi*(cox$hour/24))
 # Julian Day
 cox$sday = sin(2*pi*(cox$J/365))
 cox$cday = cos(2*pi*(cox$J/365))
-  
+
+cox$daySq = cox$J_center^2
+
 # Lunar cycle  
 cox$sLunar = sin(cox$lunarphase) 
 cox$cLunar = cos(cox$lunarphase)
@@ -63,7 +88,6 @@ cox$cLunar = cos(cox$lunarphase)
 cox$sLunar2 = sin(cox$lunar2)
 cox$cLunar2 = cos(cox$lunar2)
 
-cox$SpawnSeason = factor(cox$SpawnSeason)
 
 ```
 
@@ -107,125 +131,42 @@ Zinb1 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + shour + chour + sLunar +
                   dist = "negbin", link = "logit", data = cox)
 summary(Zinb1)
 
+# Zero-inflated negative binomial: Global Model, day as quadratic
+
+Zinbq = zeroinfl(n_grunts ~ SpawnSeason + J_center + daySq + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + J_center + daySq + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                  dist = "negbin", link = "logit", data = cox)
+summary(Zinbq)
+
 # likelihood ratio test between the poisson and neg bin models
 # proceed with negative binomial 
 lrtest(Zip1, Zinb1) 
-AIC(Zip1, Zinb1)
+AIC(Zip1, Zinb1, Zinbq)
 
-### Test parameters step-wise and conduct likelihood ratio tests
-
-# # Remove hour from count model
-# Zinb2 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
-#                   SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-#                   dist = "negbin", link = "logit", data = cox)
-# summary(Zinb2)
-# lrtest(Zinb1, Zinb2)
-# 
-# # same as 1, but removed Spawn Season from zero process
-# Zinb3 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + shour +chour + sLunar + cLunar + sLunar2 + cLunar2 |
-#                   sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-#                   dist = "negbin", link = "logit", data = cox)
-# summary(Zinb3)
-# lrtest(Zinb1, Zinb3)
-# # not different from Zinb1
-# 
-# 
-# model.sel(Zinb1, Zinb2, Zinb3)
-
-
-```
-
-## Backwards step-wise model selection: 
-
-Zinb4 has lowest AIC and highest likelihood, but is generally indistinguishable from Zinb11 and Zinb8
-Zinb4 is the same model selected as best as above
-
-```{r}
-
-# Count process:
-
-Zinb2 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + shour + chour + sLunar + cLunar |
-                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+### Candidate models: hypotheses based on Mass Bay results
+ 
+# Global Model
+globalMod = zeroinfl(n_grunts ~ SpawnSeason + J_center + daySq + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + J_center + daySq + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
                   dist = "negbin", link = "logit", data = cox)
-lrtest(Zinb1, Zinb2) 
 
-Zinb3 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + shour + chour + sLunar2 + cLunar2 |
-                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+# no lunar terms in zero process
+Mod1 = zeroinfl(n_grunts ~ SpawnSeason + J_center + daySq + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + J_center + daySq + shour + chour,
                   dist = "negbin", link = "logit", data = cox)
-lrtest(Zinb1, Zinb3) 
 
-Zinb4 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+# Only L1 in zero process
+Mod2 = zeroinfl(n_grunts ~ SpawnSeason + J_center + daySq + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + J_center + daySq + shour + chour + sLunar + cLunar,
                   dist = "negbin", link = "logit", data = cox)
-lrtest(Zinb1, Zinb4) 
 
-Zinb5 = zeroinfl(n_grunts ~ SpawnSeason + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+# Only L2 in zero process
+Mod3 = zeroinfl(n_grunts ~ SpawnSeason + J_center + daySq + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + J_center + daySq + shour + chour + sLunar2 + cLunar2,
                   dist = "negbin", link = "logit", data = cox)
-lrtest(Zinb4, Zinb5) 
 
-Zinb6 = zeroinfl(n_grunts ~ sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-lrtest(Zinb4, Zinb6) 
-
-
-model.sel(Zinb1, Zinb2, Zinb3, Zinb4, Zinb5, Zinb6)
-
-# Zero process
-Zinb7 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar,
-                  dist = "negbin", link = "logit", data = cox)
-lrtest(Zinb4, Zinb7) 
-
-Zinb8 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + sday + cday + shour + chour + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-lrtest(Zinb4, Zinb8) 
-model.sel(Zinb4, Zinb8) # these are indistinguishable, which one to use moving forward?
-
-Zinb9 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-lrtest(Zinb4, Zinb9) 
-
-Zinb10 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-lrtest(Zinb4, Zinb10) 
-
-Zinb11 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
-                  sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-lrtest(Zinb4, Zinb11) 
-
-Zinb12 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
-                  sday + cday + shour + chour + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-model.sel(Zinb4, Zinb8, Zinb11, Zinb12) 
-
-model.sel(Zinb1, Zinb2, Zinb3, Zinb4, Zinb5, Zinb6, Zinb7, Zinb8, Zinb9, Zinb10, Zinb11, Zinb12)
-
-```
-
-## Hurdle Model
-
-Sticking with mixture model, because I don't think that the process of producing counts is different than the one producing zeros
-Also, hurdle model is a much worse fit
-```{r}
-Hnb1 = hurdle(n_grunts ~ SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-summary(Hnb1)
-
-# using best model
-Hnb2 = hurdle(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-summary(codMod)
-
-#model.sel(Zinb1, Zinb2, Zinb3, Hnb1)
-model.sel(Zinb4, Hnb2)
+model.sel(globalMod, Mod1, Mod2, Mod3)
+# Mod 3 (only L2 in zero-process) has lowest AIC, delta is 10 to next best
 
 ```
 
@@ -239,8 +180,8 @@ Questions:
 
 ```{r}
 
-codMod = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+codMod = zeroinfl(n_grunts ~ SpawnSeason + J_center + daySq + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
+                  SpawnSeason + J_center + daySq + shour + chour + sLunar2 + cLunar2,
                   dist = "negbin", link = "logit", data = cox)
 summary(codMod)
 
@@ -261,10 +202,10 @@ make_circ<-function(d){
       out$shour<-sin(2*pi*(out$hour/24))
       out$chour<-cos(2*pi*(out$hour/24))
     }
-    if("day"%in%namez){
-      out$sday<-sin(2*pi*(out$day/365))
-      out$cday<-cos(2*pi*(out$day/365))
-    }
+    # if("day"%in%namez){
+    #   out$sday<-sin(2*pi*(out$day/365))
+    #   out$cday<-cos(2*pi*(out$day/365))
+    # }
     if("Lunar"%in%namez){
       out$sLunar<-sin(out$Lunar)
       out$cLunar<-cos(out$Lunar)
@@ -279,15 +220,15 @@ make_circ<-function(d){
 
 ## Diel Estimated marginal means following Micah's code 
 # Day = 309 (mean day of presence), Full moon
-nHour = expand.grid(SpawnSeason=as.character(unique(cox$SpawnSeason)), day=309, Lunar=pi, hour=0:23)
+nHour = expand.grid(SpawnSeason=as.character(unique(cox$SpawnSeason)), J_center=-0.7321493, Lunar=pi, hour=0:23)
 nHour = make_circ(nHour)
 nHour$presence = predict(codMod, newdata=nHour, type='zero')
-nHour$rate = predict(codMod, newdata=nHour, type='count') # dont need rate here bc it's not in the model
+nHour$rate = predict(codMod, newdata=nHour, type='count') 
 emm_h = summaryBy(cbind(presence,rate)~hour,data=nHour,FUN=mean,keep.names=TRUE)
 
 ## Lunar EMM
 # why only 1 lunar effect and not two separate for semi-lunar? would predictions be the same, since it's the same cycle?
-nLunar = expand.grid(SpawnSeason=as.character(unique(cox$SpawnSeason)), day=309, Lunar=seq(0,2*pi,length=16),hour=0)
+nLunar = expand.grid(SpawnSeason=as.character(unique(cox$SpawnSeason)), J_center=-0.7321493, Lunar=seq(0,2*pi,length=16),hour=0)
 nLunar = make_circ(nLunar)
 nLunar$presence = predict(codMod, newdata=nLunar, type='zero')
 nLunar$rate = predict(codMod, newdata=nLunar, type='count')

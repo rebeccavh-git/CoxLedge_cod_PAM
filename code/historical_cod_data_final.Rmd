@@ -95,7 +95,7 @@ ggplot(data = gruntperday, aes(x = day, y = n_grunts))+ theme_bw()+
 ```
 
 # Exploring daily patterns
-
+5
 ```{r}
 gruntperhr = cod %>%
   group_by(SpawnSeason = cod$SpawnSeason, year = year(cod$DateTime), month = month(cod$DateTime), date = date(cod$DateTime),
@@ -268,13 +268,17 @@ cod_data$SpawnSeason = factor(cod_data$SpawnSeason)
 yearDay = yday(cod_data$DateTime)
 yearWeek = week(cod_data$DateTime)
 
-
 cod_data = cod_data %>%
-  mutate(region = "CoxLedge", site = "COX01", siteY = paste(site,year, sep = "_"), J = yearDay,
-           yearDay = paste(year, yearDay, sep = "_"), wk = yearWeek, yearweek = paste(year, yearWeek, sep = "_"))
+  mutate(J = yearDay, yearDay = paste(year, yearDay, sep = "_"), wk = yearWeek, yearweek = paste(year, yearWeek, sep = "_"))
+
+J_ss = cod_data$J
+J_ss[J_ss <32] = J_ss[J_ss <32]+365
+J_ss = J_ss[1:2952]
+J_centered = scale(J_ss, center = TRUE)
+
+cod_data$J_center = rep(J_centered,2)
 
 write.csv(cod_data, "data/codCoxModelData.csv")
-
 
 ```
 
