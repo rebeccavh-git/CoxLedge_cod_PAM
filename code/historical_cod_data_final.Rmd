@@ -95,7 +95,7 @@ ggplot(data = gruntperday, aes(x = day, y = n_grunts))+ theme_bw()+
 ```
 
 # Exploring daily patterns
-5
+
 ```{r}
 gruntperhr = cod %>%
   group_by(SpawnSeason = cod$SpawnSeason, year = year(cod$DateTime), month = month(cod$DateTime), date = date(cod$DateTime),

@@ -30,9 +30,11 @@ Summary of meeting with James: 11/22
   - EM means likely has a confidence interval function
   - revisit to confirm that each variable is held at their mean
   - revisit Micah's code - consider using EMmeans package directly
-  - gg_predict likely shows confidence interval
+  - ggpredict likely shows confidence interval
   - otherwise use std errors and link function to generate 95% CI using bootstrapping methods on linear predictors, 
     and back-transform into predictor space
+
+vignette exploring residuals: https://aosmith.rbind.io/2017/12/21/using-dharma-for-residual-checks-of-unsupported-models/#example-using-zeroinfl
 
 
 ```{r setup, include=FALSE}
@@ -59,13 +61,13 @@ library(doBy) # for summaryBy - can I use dplyr/ group_by instead?
 ```
 
 # Load data
-now just modeling cox ledge data and testing whether the peak dates/association falls within the range of mass bay
+
 ```{r}
 cox = read.csv("data/codCoxModelData.csv", header = TRUE)
 
 ```
 
-# Creating sin and cosine variables
+# Transform predictors to circular or quadratic
 
 ```{r}
 cox$SpawnSeason = factor(cox$SpawnSeason)
@@ -110,11 +112,7 @@ meanDay = mean(codPresence$J)
 
 ```
 
-# Mixture model
-
-Questions: 
-1. Is this model selection work flow (based on model summary/predictor significance) sufficient?
-2. How to choose best model when AIC values are so similar
+# Mixture model: compare poisson with neg binomial of global mode
 
 ```{r}
 ### Global Model
@@ -142,13 +140,18 @@ summary(Zinbq)
 # proceed with negative binomial 
 lrtest(Zip1, Zinb1) 
 AIC(Zip1, Zinb1, Zinbq)
+```
 
+## Moving forward with Negative Binomial - build candidate models
+
+Caiger et al (Mass Bay paper): best models used as candidate models for Cox Ledge data set 
+```{r}
 ### Candidate models: hypotheses based on Mass Bay results
  
 # Global Model
 globalMod = zeroinfl(n_grunts ~ SpawnSeason + J_center + daySq + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
                   SpawnSeason + J_center + daySq + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
+                  dist = "negbin", link = "logit", data = cox, na.action = na.fail)
 
 # no lunar terms in zero process
 Mod1 = zeroinfl(n_grunts ~ SpawnSeason + J_center + daySq + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
@@ -165,32 +168,36 @@ Mod3 = zeroinfl(n_grunts ~ SpawnSeason + J_center + daySq + shour + chour + sLun
                   SpawnSeason + J_center + daySq + shour + chour + sLunar2 + cLunar2,
                   dist = "negbin", link = "logit", data = cox)
 
-model.sel(globalMod, Mod1, Mod2, Mod3)
+# Only L2 in count processes, no lunar in zero
+Mod4 = zeroinfl(n_grunts ~ SpawnSeason + J_center + daySq + shour + chour + sLunar2 + cLunar2 |
+                  SpawnSeason + J_center + daySq + shour + chour,
+                  dist = "negbin", link = "logit", data = cox)
+
+model.sel(globalMod, Mod1, Mod2, Mod3, Mod4)
 # Mod 3 (only L2 in zero-process) has lowest AIC, delta is 10 to next best
+
 
 ```
 
 # Final model summary & estimated marginal means
 
 Questions: 
-1. How to extract predictions from the zero and count processes of the model
-2. Estimate marginal means: Do I hold covariates at the mean of observed grunts? 
-   (ie. mean hour of the day is 12pm, but mean hour of observed grunts may be 4pm?)
-3. Is there a confidence interval around the estimated marginal means?
+1. How to extract predictions & CI from the zero and count processes of the model with circular variables
 
 ```{r}
-
 codMod = zeroinfl(n_grunts ~ SpawnSeason + J_center + daySq + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
                   SpawnSeason + J_center + daySq + shour + chour + sLunar2 + cLunar2,
                   dist = "negbin", link = "logit", data = cox)
 summary(codMod)
 
+# EM Means without Micah's code
+
+test_grid = ref_grid(codMod)
 
 ## Estimated marginal means
-# need to follow the emmeans vignettes to be sure the math behind these params is correct
-# confirm mode and whether should use lin.predict = TRUE?
-#emm_day_pres = emmeans(codMod, ~ sday + cday, mode = "zero")
-#emm_day_rate = emmeans(codMod, ~ sday + cday, mode = "count")
+## This does not account for the circular nature?
+#emm_day_pres = emmeans(codMod, ~ shour + chour, mode = "zero")
+#emm_day_rate = emmeans(codMod, ~ shour + chour, mode = "count")
 
 # interpret how they calculated emmeans on circular variables. Set others to their mean and calculated effects?
 
@@ -202,9 +209,13 @@ make_circ<-function(d){
       out$shour<-sin(2*pi*(out$hour/24))
       out$chour<-cos(2*pi*(out$hour/24))
     }
-    # if("day"%in%namez){
+    # if("day"%in%namez){  #original code for when model included circular day
     #   out$sday<-sin(2*pi*(out$day/365))
     #   out$cday<-cos(2*pi*(out$day/365))
+    # }
+    # if("day"%in%namez){  # my attempt to update this function for the circular variable (it didn't work)
+    #   out$J_center<-out$J_center
+    #   out$daysq<-out$J_center^2
     # }
     if("Lunar"%in%namez){
       out$sLunar<-sin(out$Lunar)
@@ -220,33 +231,34 @@ make_circ<-function(d){
 
 ## Diel Estimated marginal means following Micah's code 
 # Day = 309 (mean day of presence), Full moon
-nHour = expand.grid(SpawnSeason=as.character(unique(cox$SpawnSeason)), J_center=-0.7321493, Lunar=pi, hour=0:23)
+nHour = expand.grid(SpawnSeason=as.character(unique(cox$SpawnSeason)), J_center=-0.7321493, daySq=0.5360426, Lunar=pi, hour=0:23)
 nHour = make_circ(nHour)
 nHour$presence = predict(codMod, newdata=nHour, type='zero')
 nHour$rate = predict(codMod, newdata=nHour, type='count') 
 emm_h = summaryBy(cbind(presence,rate)~hour,data=nHour,FUN=mean,keep.names=TRUE)
 
 ## Lunar EMM
-# why only 1 lunar effect and not two separate for semi-lunar? would predictions be the same, since it's the same cycle?
-nLunar = expand.grid(SpawnSeason=as.character(unique(cox$SpawnSeason)), J_center=-0.7321493, Lunar=seq(0,2*pi,length=16),hour=0)
+nLunar = expand.grid(SpawnSeason=as.character(unique(cox$SpawnSeason)), J_center=-0.7321493, daySq=0.5360426,
+                    Lunar=seq(0,2*pi,length=16),hour=0)
 nLunar = make_circ(nLunar)
 nLunar$presence = predict(codMod, newdata=nLunar, type='zero')
 nLunar$rate = predict(codMod, newdata=nLunar, type='count')
 emm_l<-summaryBy(cbind(presence,rate)~Lunar,data=nLunar,FUN=mean,keep.names=TRUE) 
 
 ## Seasonal effect 
-# current plot of presence look very weird (why peak in October??)
-nDay = expand.grid(SpawnSeason=as.character(unique(cox$SpawnSeason)),day=c(274:365,1:31),Lunar=pi,hour=0)
+J_centerRange = unique(cox$J_center)
+daySqRange = unique(cox$daySq)
+nDay = expand.grid(SpawnSeason=as.character(unique(cox$SpawnSeason)),J_center=J_centerRange, daySq = daySqRange ,Lunar=pi,hour=0)
 nDay = make_circ(nDay)
 nDay$presence = predict(codMod, newdata=nDay, type='zero')
 nDay$rate = predict(codMod, newdata=nDay, type='count')
-emm_j<-summaryBy(cbind(presence,rate)~day,data=nDay,FUN=mean,keep.names=TRUE)
-#emm_j$edate<-as.Date('2012-12-31')+emm_j$J
+emm_j<-summaryBy(cbind(presence,rate)~J_center,data=nDay,FUN=mean,keep.names=TRUE)
 
-emm_j$month = c(rep(1,31),rep(10, 31), rep(11,30), rep(12,31))
-emm_j$date = c(1:31,1:31,1:30,1:31)
-emm_j$SSorder = emm_j$day
-emm_j$SSorder[1:31] = emm_j$SSorder[1:31]+365
+# my edits to make this dataframe work with the date range
+# emm_j$month = c(rep(1,31),rep(10, 31), rep(11,30), rep(12,31))
+# emm_j$date = c(1:31,1:31,1:30,1:31)
+# emm_j$SSorder = emm_j$day
+# emm_j$SSorder[1:31] = emm_j$SSorder[1:31]+365
 
 
 ```
@@ -254,54 +266,52 @@ emm_j$SSorder[1:31] = emm_j$SSorder[1:31]+365
 ## Plot EM Means with ggplot
 
 ```{r}
-# plots in base R
 
 # Diel
 ggplot(data=emm_h, aes(x=hour, y = presence))+ theme_bw()+
   coord_polar(start = 0)+
   geom_line(size = 1)+
   scale_x_continuous(name = "Hour", breaks = c(6,12,18,24), labels = c("6", "12", "18","24"))+
-  scale_y_continuous(name = "Grunt Presence", limits = c(0,1))+
+  scale_y_continuous(name = "Grunt Presence")+
   theme(axis.title = element_text(size = 14),
         axis.text = element_text(size = 12))
 
-# ggplot(data=emm_h, aes(x=hour, y = rate))+ theme_bw()+
-#   coord_polar(start = 0)+
-#   geom_line(size = 1)+
-#   scale_x_continuous(name = "Hour", breaks = c(6,12,18,24), labels = c("6", "12", "18","24"))+
-#   scale_y_continuous(name = "Grunt Rate", limits = c(0,1))+
-#   theme(axis.title = element_text(size = 14),
-#         axis.text = element_text(size = 12))
+ggplot(data=emm_h, aes(x=hour, y = rate))+ theme_bw()+
+  coord_polar(start = 0)+
+  geom_line(size = 1)+
+  scale_x_continuous(name = "Hour", breaks = c(6,12,18,24), labels = c("6", "12", "18","24"))+
+  scale_y_continuous(name = "Grunt Rate")+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12))
 
 #Lunar
 # the rate association is weird
 ggplot(data=emm_l, aes(x=Lunar, y = presence))+ theme_bw()+
   coord_polar(start = 0)+
-  geom_line(size = 2)+
+  geom_line(size = 1)+
   scale_x_continuous(name = "Lunar cycle", breaks = c(0,pi/2, pi, 3*pi/2),labels = c("New", "Waxing","Full","Waning"))+
-  scale_y_continuous(name = "Grunt Presence", limits = c(0,1))+
+  scale_y_continuous(name = "Grunt Presence")+
   theme(axis.title = element_text(size = 14),
         axis.text = element_text(size = 12))
 
 ggplot(data=emm_l, aes(x=Lunar, y = rate))+ theme_bw()+
   coord_polar(start = 0)+
-  geom_line(size = 2)+
+  geom_line(size = 1)+
   scale_x_continuous(name = "Lunar cycle", breaks = c(0,pi/2, pi, 3*pi/2),labels = c("New", "Waxing","Full","Waning"))+
-  scale_y_continuous(name = "Grunt Rate", limits = c(0,110))+
+  scale_y_continuous(name = "Grunt Rate")+
   theme(axis.title = element_text(size = 14),
         axis.text = element_text(size = 12))
 
 # Seasonal
-# presence em mean is weird
-ggplot(data=emm_j, aes(x=SSorder, y = presence))+ theme_bw()+
+ggplot(data=emm_j, aes(x=J_center, y = presence))+ theme_bw()+
   geom_line(size = 1)+
-  scale_x_continuous(name = "Month", breaks = c(274,305,335,366), labels = c("Oct", "Nov", "Dec","Jan"))+
+  #scale_x_continuous(name = "Month", breaks = c(274,305,335,366), labels = c("Oct", "Nov", "Dec","Jan"))+
   theme(axis.title = element_text(size = 14),
         axis.text = element_text(size = 12))
 
-ggplot(data=emm_j, aes(x=SSorder, y = rate))+ theme_bw()+
+ggplot(data=emm_j, aes(x=J_center, y = rate))+ theme_bw()+
   geom_line(size = 1)+
-  scale_x_continuous(name = "Month", breaks = c(274,305,335,366), labels = c("Oct", "Nov", "Dec","Jan"))+
+  #scale_x_continuous(name = "Month", breaks = c(274,305,335,366), labels = c("Oct", "Nov", "Dec","Jan"))+
   theme(axis.title = element_text(size = 14),
         axis.text = element_text(size = 12))
 
