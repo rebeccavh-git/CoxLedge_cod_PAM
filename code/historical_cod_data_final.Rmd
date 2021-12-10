@@ -60,6 +60,8 @@ gruntperday$month = factor(gruntperday$month, levels = c("10","11","12","1"))
 
 gruntperday$day = day(gruntperday$date)
 
+gruntperday$monthDay = yday(gruntperday$date)
+
 #confirm each spawning season has average >5 grunts per day
 gruntperday %>% 
   group_by(SpawnSeason, month(date)) %>% 
@@ -81,16 +83,16 @@ hrs_w_grunt = cod %>%
 
 hrs_w_grunt > SS_min_hours
 
-ggplot(data = gruntperday, aes(x = day, y = n_grunts))+ theme_bw()+
-  geom_col()+
-  scale_x_continuous(breaks = c(1,7,14,21,28), limits = c(1,31))+
-  facet_grid(rows = vars(SpawnSeason), cols = vars(month))+
-  xlab("Day of the Month")+ ylab("Observed number of grunts")+
-  ggtitle("Seasonal Patterns in Sound Production")+
-  theme(axis.title = element_text(size = 14),
-        axis.text = element_text(size = 12),
-        title = element_text(size = 14), 
-        strip.text = element_text(size = 12))
+# ggplot(data = gruntperday, aes(x = day, y = n_grunts))+ theme_bw()+
+#   geom_col()+
+#   scale_x_continuous(breaks = c(1,7,14,21,28), limits = c(1,31))+
+#   facet_grid(rows = vars(SpawnSeason), cols = vars(month))+
+#   xlab("Day of the Month")+ ylab("Observed number of grunts")+
+#   ggtitle("Seasonal Patterns in Sound Production")+
+#   theme(axis.title = element_text(size = 14),
+#         axis.text = element_text(size = 12),
+#         title = element_text(size = 14), 
+#         strip.text = element_text(size = 12))
 
 ```
 
@@ -126,7 +128,24 @@ ggplot(data=cod, aes(x=hour(DateTime)))+ theme_bw()+
   theme(axis.title = element_text(size = 14),
         axis.text = element_text(size = 12))
 
-# grunt rate each hour across all seasons and years
+
+# plot Mean grunts per hour for each day across spawning season. Single plot for each spawning season
+meanGruntHrDay = cod %>%
+  group_by(SpawnSeason, month, day) %>%
+  summarize(meanGrunt = mean(n_grunts))
+
+meanGruntHrDay["month"][meanGruntHrDay["month"] == "1"] = 13
+meanGruntHrDay$monthday = paste(meanGruntHrDay$month, meanGruntHrDay$day, sep = "_")
+
+# average grunts per hour on each day, (modeled after Zemeckis et al (2019) Fig 6)
+# add model predictions to these also
+ggplot(data = meanGruntHrDay, aes(x = monthday, y = meanGrunt))+ theme_bw()+
+  geom_col()+
+  scale_x_discrete(breaks = c("11_01","12_01","13_01"), 
+                  labels = c("Nov", "Dec", "Jan"))+
+  ylab("Average number of grunts per hour")+
+  facet_grid(rows = vars(SpawnSeason))+
+  theme(axis.title.x = element_blank())
 
 
 ```
@@ -279,6 +298,57 @@ J_centered = scale(J_ss, center = TRUE)
 cod_data$J_center = rep(J_centered,2)
 
 write.csv(cod_data, "data/codCoxModelData.csv")
+
+```
+
+## Manuscript figures: Observed data
+
+```{r}
+# Fig 1: Map
+
+# Fig 2 Observed grunts per hour
+ggplot(data = gruntperhr, aes(x = hour, y = avg_hr))+ theme_bw()+
+  geom_col()+
+  geom_errorbar(aes(ymin = avg_hr, ymax = avg_hr+stdev, width = 0.2))+
+  facet_grid(rows = vars(SpawnSeason), cols = vars(month))+
+  xlab("Hour of the the day")+ ylab("Average number of grunts per hour")+
+  #ggtitle("Daily Patterns in Sound Production")+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        title = element_text(size = 14), 
+        strip.text = element_text(size = 12))
+
+
+# Fig 3 Lunar association each spawn season
+ggplot(data=cod, aes(x = lunarphase))+ theme_bw()+
+  geom_histogram(fill='grey',color='black', bins = 20)+
+  coord_polar(start = 0)+
+  facet_wrap(facets = vars(SpawnSeason))+
+  scale_y_continuous(name = "Observed grunts",limits = c(-5,100))+
+  scale_x_continuous(breaks = c(0,pi/2, pi, 3*pi/2),labels = c("New", "Waxing","Full","Waning"))+
+  theme(axis.title.y = element_text(size = 14),
+        axis.title.x = element_blank(),
+        axis.text = element_text(size = 12),
+        #axis.text.y = element_blank(),
+        panel.grid.major.x = element_blank())#,
+        #panel.border = element_blank(),
+        #strip.text = element_blank())
+
+
+# Fig 4 Observed grunts each day
+
+### make this a single panel for each spawn season - add the predicted grunts on top...
+# ggplot(data = gruntperday, aes(x = day, y = n_grunts))+ theme_bw()+
+#   geom_col()+
+#   scale_x_continuous(breaks = c(1,7,14,21,28), limits = c(1,31))+
+#   facet_grid(rows = vars(SpawnSeason), cols = vars(month))+
+#   xlab("Day of the Month")+ ylab("Observed number of grunts")+
+#   ggtitle("Seasonal Patterns in Sound Production")+
+#   theme(axis.title = element_text(size = 14),
+#         axis.text = element_text(size = 12),
+#         title = element_text(size = 14), 
+#         strip.text = element_text(size = 12))
+
 
 ```
 
