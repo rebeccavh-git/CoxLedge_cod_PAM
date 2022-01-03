@@ -83,16 +83,15 @@ hrs_w_grunt = cod %>%
 
 hrs_w_grunt > SS_min_hours
 
-# ggplot(data = gruntperday, aes(x = day, y = n_grunts))+ theme_bw()+
-#   geom_col()+
-#   scale_x_continuous(breaks = c(1,7,14,21,28), limits = c(1,31))+
-#   facet_grid(rows = vars(SpawnSeason), cols = vars(month))+
-#   xlab("Day of the Month")+ ylab("Observed number of grunts")+
-#   ggtitle("Seasonal Patterns in Sound Production")+
-#   theme(axis.title = element_text(size = 14),
-#         axis.text = element_text(size = 12),
-#         title = element_text(size = 14), 
-#         strip.text = element_text(size = 12))
+ggplot(data = gruntperday, aes(x = day, y = n_grunts))+ theme_bw()+
+  geom_col()+
+  scale_x_continuous(breaks = c(1,7,14,21,28), limits = c(1,31))+
+  facet_grid(rows = vars(SpawnSeason), cols = vars(month))+
+  xlab("Day of the Month")+ ylab("Observed number of grunts")+
+  #ggtitle("Seasonal Patterns in Sound Production")+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        strip.text = element_text(size = 12))
 
 ```
 
