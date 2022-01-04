@@ -26,6 +26,8 @@ Questions:
 1. Is this statistical framework suitable to evaluate the question? 
 2. Am I building and evaluating the models correctly? Specifically, I am unsure how to account for the nested site within region and the unbalanced number of sites between the regions. 
 
+Moving forward with only site 17 for Mass Bay, at the same depth and has data for both years
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
@@ -47,6 +49,13 @@ Load data - all data wrangling and exploratory visualizations were done in histo
 
 cod_data = read.csv("data/cod_allregions07-21.csv", header = TRUE)
 cod_data = cod_data[,-1] # remove row index
+
+cod_data$region = as.factor(cod_data$region)
+
+# filter to only Site 17
+cod_data = cod_data %>%
+  group_by(site) %>%
+  filter(site == "COX01" | site == "17" )
 
 ```
 
@@ -111,7 +120,7 @@ summary(codModNB_rSiteNested)
 # warning: boundary (singular) fit
 codModNB_rSiteIS = glmer(presence ~ SpawnSeason + region + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 + 
                                 sday + cday + (1+site|region), data = cod_data, family = binomial(link = "logit"))
-summary(codModNB_rSiteIS)# change to cod mod once run
+summary(codModNB_rSiteIS)
 
 # AIC suggests that the simplest model - without region is the best fit
 AIC(codMod, codMod_nosite, codMod_rSite, codModNB_rSiteNested, codModNB_rSiteIS)
@@ -137,15 +146,21 @@ RateModNB_full = glm.nb(n_grunts ~ SpawnSeason + site + shour + chour + sLunar +
                    data = cod_data)
 summary(RateModNB_full)
 
+# Removed site - didn't add region
+RateModNB_nosite = glm.nb(n_grunts ~ SpawnSeason + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
+                   data = cod_data)
+summary(RateModNB_nosite)
+
 RateModNB_region = glm.nb(n_grunts ~ SpawnSeason + region + site + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
                    data = cod_data)
 summary(RateModNB_region)
 
-# AIC suggests the neg bin is a much better fit
-AIC(RateMod_full, RateModNB_full)
+# AIC suggests the neg bin is a much better fit, and with site is better than without
+AIC(RateMod_full, RateModNB_full, RateModNB_nosite)
+anova(RateModNB_full, RateModNB_nosite)
 
 # Continue using NB error, add region and change site to a random intercept
-RateModNB_rSite = glmer.nb(n_grunts ~ SglmpawnSeason + region + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 +
+RateModNB_rSite = glmer.nb(n_grunts ~ SpawnSeason + region + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 +
                        (1|site), data = cod_data)
 summary(RateModNB_rSite)
 # Region was not significant
@@ -164,6 +179,7 @@ RateModNB_rSiteNested = glmer.nb(n_grunts ~ SpawnSeason + region + shour + chour
                        (1|site:region), data = cod_data)
 summary(RateModNB_rSiteNested)
 
+# takes forever to run, so I stopped R
 RateModNB_rSiteIS = glmer.nb(n_grunts ~ SpawnSeason + region + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 +
                        (1+site|region), data = cod_data)
 summary(RateModNB_rSiteIS)
