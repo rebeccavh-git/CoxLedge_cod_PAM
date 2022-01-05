@@ -101,13 +101,13 @@ meanDay = mean(PresenceOnly$Jedit)
 ```{r}
 #### Presence - binomial
 
-#global_P = glmmTMB(presence ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 + shour + chour + (1|wk),
-#                   data = cox, family = binomial)
+global_P = glmmTMB(presence ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 + shour + chour + (1|wk),
+                   data = cox, family = binomial)
 
 global_P_quadDay = glmmTMB(presence ~ SpawnSeason + J_center + daySq + sLunar + cLunar + sLunar2 + cLunar2 + shour + chour + (1|wk),
                    data = cox, family = binomial)
 
-# treating day as a quadratic doesn't substantially improve fit, but it does make more mathmatical sense
+# treating day as a quadratic doesn't substantially improve fit, but it does make more mathematical sense
 AIC(global_P, global_P_quadDay)
 
 bin1 = glmmTMB(presence ~ SpawnSeason + J_center + daySq + sLunar2 + cLunar2 + shour + chour + (1|wk),
@@ -135,7 +135,7 @@ model.sel(global_P_quadDay, bin1, bin2, bin3)
 #### Rate: Zero-inflated negative binomial
 #gtmbcon<-glmmTMBControl(optCtrl=list(iter.max=10e3,eval.max=10e3))
 
-# This thre multiple errors/warnings related to infinite or missing values, and na function evaluation
+# This threw multiple errors/warnings related to infinite or missing values, and na function evaluation
 #global_R = glmmTMB(n_grunts ~ SpawnSeason + J_center + daySq + sLunar + cLunar + sLunar2 + cLunar2 + shour + chour + (1|wk),
 #                   data = cox, family = nbinom1(), 
 #                   ziformula = ~.)
@@ -143,6 +143,10 @@ model.sel(global_P_quadDay, bin1, bin2, bin3)
 global_R_nb2 = glmmTMB(n_grunts ~ SpawnSeason + J_center + daySq + sLunar + cLunar + sLunar2 + cLunar2 + shour + chour + (1|wk),
                    data = cox, family = nbinom2(),
                    ziformula = ~.)
+
+# global_R_cJ = glmmTMB(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 + shour + chour + (1|wk),
+#                    data = cox, family = nbinom2(),
+#                    ziformula = ~.)
   
 zinb1 = glmmTMB(n_grunts ~ SpawnSeason + J_center + daySq + sLunar + cLunar + sLunar2 + cLunar2 + shour + chour + (1|wk),
                    data = cox, family = nbinom2(),
@@ -160,7 +164,6 @@ model.sel(global_R_nb2, zinb1, zinb2)
 #model.sel(global_R_nb2, zinb1, zinb2, nb1)
 
 # Global model is still the best
-
 ```
 
 ## Summarize EM Means of best models 
@@ -223,6 +226,20 @@ ndRate$uprCIR =  zbestCox$modelInfo$family$linkinv(ndRate$upr_link)
 nd = cbind(nd,ndRate)
 emm_hCox = summaryBy(cbind(fittedP,lwrCIP,uprCIP,fittedR,lwrCIR,uprCIR)~hour,data=nd,FUN=mean,keep.names=TRUE)
 
+#### Take 2: Diel EMM With type = response for rate
+# type=response did not change presence fit, but did change the CI and everything for the rate model
+nd = expand.grid(SpawnSeason=as.character(unique(cox$SpawnSeason)), J_center=0.05631918, daySq=0.0031718495, Lunar=pi, hour=0:24, wk = NA)
+nd = make_circ(nd)
+nd = cbind(nd,as.data.frame(predict(bbestCox,newdata=nd,type='response',se.fit = TRUE)))
+nd$lwrCIP = nd$fit + qnorm(0.025)*nd$se.fit 
+nd$uprCIP = nd$fit + qnorm(0.975)*nd$se.fit 
+nd$fittedP = nd$fit
+ndRate = as.data.frame(predict(zbestCox,newdata=nd,type='response',se.fit = TRUE))
+ndRate$lwrCIR = ndRate$fit + qnorm(0.025)*ndRate$se.fit # convert se to CI on link scale
+ndRate$uprCIR = ndRate$fit + qnorm(0.975)*ndRate$se.fit 
+ndRate$fittedR = ndRate$fit
+nd = cbind(nd,ndRate[,c(3:5)])
+emm_hCox = summaryBy(cbind(fittedP,lwrCIP,uprCIP,fittedR,lwrCIR,uprCIR)~hour,data=nd,FUN=mean,keep.names=TRUE)
 
 ## Lunar EMM
 nd = expand.grid(SpawnSeason=as.character(unique(cox$SpawnSeason)), J_center=0.05631918, daySq=0.0031718495,
@@ -243,8 +260,23 @@ ndRate$uprCIR =  zbestCox$modelInfo$family$linkinv(ndRate$upr_link)
 nd = cbind(nd,ndRate)
 emm_lCox = summaryBy(cbind(fittedP,lwrCIP,uprCIP,fittedR,lwrCIR,uprCIR)~Lunar,data=nd,FUN=mean,keep.names=TRUE)
 
+### Take 2: Lunar
+nd = expand.grid(SpawnSeason=as.character(unique(cox$SpawnSeason)), J_center=0.05631918, daySq=0.0031718495,
+                    Lunar=seq(0,2*pi,length=16),hour=0, wk = NA)
+nd = make_circ(nd)
+nd = cbind(nd,as.data.frame(predict(bbestCox,newdata=nd,type='response',se.fit = TRUE)))
+nd$lwrCIP = nd$fit + qnorm(0.025)*nd$se.fit 
+nd$uprCIP = nd$fit + qnorm(0.975)*nd$se.fit 
+nd$fittedP = nd$fit
+ndRate = as.data.frame(predict(zbestCox,newdata=nd,type='response',se.fit = TRUE))
+ndRate$lwrCIR = ndRate$fit + qnorm(0.025)*ndRate$se.fit # convert se to CI on link scale
+ndRate$uprCIR = ndRate$fit + qnorm(0.975)*ndRate$se.fit 
+ndRate$fittedR = ndRate$fit
+nd = cbind(nd,ndRate[,c(3:5)])
+emm_lCox = summaryBy(cbind(fittedP,lwrCIP,uprCIP,fittedR,lwrCIR,uprCIR)~Lunar,data=nd,FUN=mean,keep.names=TRUE)
 
-## Seasonal effect 
+
+## Annual effect 
 J_centerRange = unique(cox$J_center)
 nd = expand.grid(SpawnSeason=as.character(unique(cox$SpawnSeason)),J_center=J_centerRange,Lunar=pi,hour=0,wk = NA)
 nd$daySq = nd$J_center^2
@@ -264,9 +296,33 @@ ndRate$uprCIR =  zbestCox$modelInfo$family$linkinv(ndRate$upr_link)
 nd = cbind(nd,ndRate)
 emm_jCox = summaryBy(cbind(fittedP,lwrCIP,uprCIP,fittedR,lwrCIR,uprCIR)~J_center,data=nd,FUN=mean,keep.names=TRUE)
 
-write.csv(emm_hCox, "data/emm_DielFX_Cox.csv")
-write.csv(emm_lCox,"data/emm_LunarFX_Cox.csv")
-write.csv(emm_jCox,"data/emm_AnnualFx_Cox.csv")
+## Take 2: Annual effect with EMmeans package - not working perfectly
+# convert Mass Bay format to work for quadratic day
+subsetJ = seq(1,123,by=3)
+J = unique(cox$J)[subsetJ]
+J_centerRange = unique(cox$J_center)[subsetJ]
+daySq = J_centerRange^2
+edate<-as.Date('2010-12-31')+J
+df_j<-data.frame(J,J_centerRange,daySq,edate)
+df_j$J_daySq = paste(df_j$J_centerRange, df_j$daySq, sep = "_")
+emm_j_pg<-as.data.frame(emmeans(bbestCox,~J_center+daySq,at=list(J=J,J_center=J_centerRange,daySq=daySq)),type='response')
+emm_j_rg<-as.data.frame(emmeans(zbestCox,~J_center+daySq,at=list(J=J,J_center=J_centerRange,daySq=daySq)),type='response')
+emm_j_pg$J_daySq = paste(emm_j_pg$J_center,emm_j_pg$daySq, sep = "_")
+emm_j_rg$J_daySq = paste(emm_j_rg$J_center,emm_j_rg$daySq, sep = "_")
+emm_j_pg<-left_join(df_j,emm_j_pg, by = "J_daySq")
+emm_j_rg<-left_join(df_j,emm_j_rg, by = "J_daySq")
+
+emm_jCox = df_j
+emm_jCox$fittedP = emm_j_pg$prob
+emm_jCox$lwrCIP = emm_j_pg$lower.CL
+emm_jCox$uprCIP = emm_j_pg$upper.CL
+emm_jCox$fittedR = emm_j_rg$response
+emm_jCox$lwrCIR = emm_j_rg$lower.CL
+emm_jCox$uprCIR = emm_j_rg$upper.CL
+
+write.csv(emm_hCox, "data/emm_DielFX_Cox_v2.csv")
+write.csv(emm_lCox,"data/emm_LunarFX_Cox_v2.csv")
+write.csv(emm_jCox,"data/emm_AnnualFx_Cox_v2.csv")
 
 ```
 
@@ -277,12 +333,12 @@ Code below calculates the EM means from the mass bay model and re-creates their 
 load("data/gsub.rdat")
 load("data/pam_mixed_modz.rdat")
 
-  #SELECT BEST MODELS FOR PLOTTING 
-  bbest<-bmodz$b15
-  zbest<-zmodz$z18
+#SELECT BEST MODELS FOR PLOTTING 
+bbest<-bmodz$b15
+zbest<-zmodz$z18
 
 ## Micah's Functions
-  make_circ<-function(d){
+make_circ<-function(d){
     out<-d
     namez<-names(d)
     if("H"%in%namez){
@@ -310,70 +366,97 @@ load("data/pam_mixed_modz.rdat")
 #MEAN ACROSS ALL YEARS & SITES, BUT AT MIDNIGHT, FULL MOON, NOV23
 
 #DIEL FX
+# nd<-expand.grid(Y=as.character(unique(gsub$Y)),Site=as.character(unique(gsub$Site)),J=335,MOON=pi,H=0:24,WK=NA,DAY=NA,DEPTH=50)
+# nd<-make_circ(nd)
+# nd = cbind(nd,as.data.frame(predict(bbest,newdata=nd,type='link',se.fit = TRUE)))
+# nd$lwr_linkP = nd$fit + qnorm(0.025)*nd$se.fit # convert se to CI on link scale
+# nd$upr_linkP = nd$fit + qnorm(0.975)*nd$se.fit 
+# nd$fittedP = bbest$modelInfo$family$linkinv(nd$fit) # convert fit & CI to probabilities
+# nd$lwrCIP = bbest$modelInfo$family$linkinv(nd$lwr_link)
+# nd$uprCIP =  bbest$modelInfo$family$linkinv(nd$upr_link)
+# # double check that prob below a 0.5, more uncertainty towards 0.5, less uncertainty towards 0
+# ndRate = as.data.frame(predict(zbest,newdata=nd,type='link',se.fit = TRUE))
+# ndRate$lwr_linkR = ndRate$fit + qnorm(0.025)*ndRate$se.fit # convert se to CI on link scale
+# ndRate$upr_linkR = ndRate$fit + qnorm(0.975)*ndRate$se.fit 
+# ndRate$fittedR = zbest$modelInfo$family$linkinv(ndRate$fit) # convert fit & CI to probabilities 
+# ndRate$lwrCIR = zbest$modelInfo$family$linkinv(ndRate$lwr_link)
+# ndRate$uprCIR =  zbest$modelInfo$family$linkinv(ndRate$upr_link)  
+# nd = cbind(nd,ndRate)
+# emm_hMB = summaryBy(cbind(fittedP,lwrCIP,uprCIP,fittedR,lwrCIR,uprCIR)~H,data=nd,FUN=mean,keep.names=TRUE)
+
+# Take 2
 nd<-expand.grid(Y=as.character(unique(gsub$Y)),Site=as.character(unique(gsub$Site)),J=335,MOON=pi,H=0:24,WK=NA,DAY=NA,DEPTH=50)
 nd<-make_circ(nd)
-nd = cbind(nd,as.data.frame(predict(bbest,newdata=nd,type='link',se.fit = TRUE)))
-nd$lwr_linkP = nd$fit + qnorm(0.025)*nd$se.fit # convert se to CI on link scale
-nd$upr_linkP = nd$fit + qnorm(0.975)*nd$se.fit 
-nd$fittedP = bbest$modelInfo$family$linkinv(nd$fit) # convert fit & CI to probabilities
-nd$lwrCIP = bbest$modelInfo$family$linkinv(nd$lwr_link)
-nd$uprCIP =  bbest$modelInfo$family$linkinv(nd$upr_link)
-# double check that prob below a 0.5, more uncertainty towards 0.5, less uncertainty towards 0
-ndRate = as.data.frame(predict(zbest,newdata=nd,type='link',se.fit = TRUE))
-ndRate$lwr_linkR = ndRate$fit + qnorm(0.025)*ndRate$se.fit # convert se to CI on link scale
-ndRate$upr_linkR = ndRate$fit + qnorm(0.975)*ndRate$se.fit 
-ndRate$fittedR = zbest$modelInfo$family$linkinv(ndRate$fit) # convert fit & CI to probabilities 
-ndRate$lwrCIR = zbest$modelInfo$family$linkinv(ndRate$lwr_link)
-ndRate$uprCIR =  zbest$modelInfo$family$linkinv(ndRate$upr_link)  
-nd = cbind(nd,ndRate)
-emm_hMB = summaryBy(cbind(fittedP,lwrCIP,uprCIP,fittedR,lwrCIR,uprCIR)~H,data=nd,FUN=mean,keep.names=TRUE)
+nd = cbind(nd,as.data.frame(predict(bbest,newdata=nd,type='response',se.fit = TRUE)))
+nd$lwrCIP = nd$fit + qnorm(0.025)*nd$se.fit 
+nd$uprCIP = nd$fit + qnorm(0.975)*nd$se.fit 
+nd$fittedP = nd$fit
+ndRate = as.data.frame(predict(zbest,newdata=nd,type='response',se.fit = TRUE))
+ndRate$lwrCIR = ndRate$fit + qnorm(0.025)*ndRate$se.fit # convert se to CI on link scale
+ndRate$uprCIR = ndRate$fit + qnorm(0.975)*ndRate$se.fit 
+ndRate$fittedR = ndRate$fit
+nd = cbind(nd,ndRate[,c(3:5)])
+emm_lMB = summaryBy(cbind(fittedP,lwrCIP,uprCIP,fittedR,lwrCIR,uprCIR)~Lunar,data=nd,FUN=mean,keep.names=TRUE)
+
 
 #LUNAR FX
+# nd = expand.grid(Y=as.character(unique(gsub$Y)),Site=as.character(unique(gsub$Site)),J=335,MOON=seq(0,2*pi,length=16),H=0,WK=NA,DAY=NA,DEPTH=50)
+# nd = make_circ(nd)
+# nd = cbind(nd,as.data.frame(predict(bbest,newdata=nd,type='link',se.fit = TRUE)))
+# nd$lwr_linkP = nd$fit + qnorm(0.025)*nd$se.fit # convert se to CI on link scale
+# nd$upr_linkP = nd$fit + qnorm(0.975)*nd$se.fit 
+# nd$fittedP = bbest$modelInfo$family$linkinv(nd$fit) # convert fit & CI to probabilities
+# nd$lwrCIP = bbest$modelInfo$family$linkinv(nd$lwr_link)
+# nd$uprCIP =  bbest$modelInfo$family$linkinv(nd$upr_link)
+# ndRate = as.data.frame(predict(zbest,newdata=nd,type='link',se.fit = TRUE))
+# ndRate$lwr_linkR = ndRate$fit + qnorm(0.025)*ndRate$se.fit # convert se to CI on link scale
+# ndRate$upr_linkR = ndRate$fit + qnorm(0.975)*ndRate$se.fit 
+# ndRate$fittedR = zbest$modelInfo$family$linkinv(ndRate$fit) # convert fit & CI to probabilities 
+# ndRate$lwrCIR = zbest$modelInfo$family$linkinv(ndRate$lwr_link)
+# ndRate$uprCIR =  zbest$modelInfo$family$linkinv(ndRate$upr_link)  
+# nd = cbind(nd,ndRate)
+# emm_lMB = summaryBy(cbind(fittedP,lwrCIP,uprCIP,fittedR,lwrCIR,uprCIR)~MOON,data=nd,FUN=mean,keep.names=TRUE) 
+
+# take 2
 nd = expand.grid(Y=as.character(unique(gsub$Y)),Site=as.character(unique(gsub$Site)),J=335,MOON=seq(0,2*pi,length=16),H=0,WK=NA,DAY=NA,DEPTH=50)
 nd = make_circ(nd)
-nd = cbind(nd,as.data.frame(predict(bbest,newdata=nd,type='link',se.fit = TRUE)))
-nd$lwr_linkP = nd$fit + qnorm(0.025)*nd$se.fit # convert se to CI on link scale
-nd$upr_linkP = nd$fit + qnorm(0.975)*nd$se.fit 
-nd$fittedP = bbest$modelInfo$family$linkinv(nd$fit) # convert fit & CI to probabilities
-nd$lwrCIP = bbest$modelInfo$family$linkinv(nd$lwr_link)
-nd$uprCIP =  bbest$modelInfo$family$linkinv(nd$upr_link)
-ndRate = as.data.frame(predict(zbest,newdata=nd,type='link',se.fit = TRUE))
-ndRate$lwr_linkR = ndRate$fit + qnorm(0.025)*ndRate$se.fit # convert se to CI on link scale
-ndRate$upr_linkR = ndRate$fit + qnorm(0.975)*ndRate$se.fit 
-ndRate$fittedR = zbest$modelInfo$family$linkinv(ndRate$fit) # convert fit & CI to probabilities 
-ndRate$lwrCIR = zbest$modelInfo$family$linkinv(ndRate$lwr_link)
-ndRate$uprCIR =  zbest$modelInfo$family$linkinv(ndRate$upr_link)  
-nd = cbind(nd,ndRate)
-emm_lMB = summaryBy(cbind(fittedP,lwrCIP,uprCIP,fittedR,lwrCIR,uprCIR)~MOON,data=nd,FUN=mean,keep.names=TRUE) 
-
-#ANNUAL FX - OVERALL
-nd<-expand.grid(Y=as.character(unique(gsub$Y)),Site=as.character(unique(gsub$Site)),J=275:400,MOON=pi,H=0,WK=NA,DAY=NA,DEPTH=50)
-nd<-make_circ(nd)
-nd$pG<-predict(bbest,newdata=nd,type='response')
-nd$rG<-predict(zbest,newdata=nd,type='response')
-emm_j<-summaryBy(cbind(pG,rG)~J,data=nd,FUN=mean,keep.names=TRUE)
-emm_j$edate<-as.Date('2010-12-31')+emm_j$J
+nd = cbind(nd,as.data.frame(predict(bbest,newdata=nd,type='response',se.fit = TRUE)))
+nd$lwrCIP = nd$fit + qnorm(0.025)*nd$se.fit 
+nd$uprCIP = nd$fit + qnorm(0.975)*nd$se.fit 
+nd$fittedP = nd$fit
+ndRate = as.data.frame(predict(zbest,newdata=nd,type='response',se.fit = TRUE))
+ndRate$lwrCIR = ndRate$fit + qnorm(0.025)*ndRate$se.fit 
+ndRate$uprCIR = ndRate$fit + qnorm(0.975)*ndRate$se.fit 
+ndRate$fittedR = ndRate$fit
+nd = cbind(nd,ndRate[,c(3:5)])
+emm_lMB = summaryBy(cbind(fittedP,lwrCIP,uprCIP,fittedR,lwrCIR,uprCIR)~Lunar,data=nd,FUN=mean,keep.names=TRUE)
 
 
-# my code for annual FX
-#nd<-expand.grid(Y=as.character(unique(gsub$Y)),Site=as.character(unique(gsub$Site)),J=275:400,MOON=pi,H=0,WK=NA,DAY=NA,DEPTH=50)
-nd<-expand.grid(Y=as.character(unique(gsub$Y)),Site=as.character(unique(gsub$Site)),J=275:365,MOON=pi,H=0,WK=NA,DAY=NA,DEPTH=50)
-nd<-make_circ(nd)
-nd = cbind(nd,as.data.frame(predict(bbest,newdata=nd,type='link',se.fit = TRUE)))
-nd$lwr_linkP = nd$fit + qnorm(0.025)*nd$se.fit # convert se to CI on link scale
-nd$upr_linkP = nd$fit + qnorm(0.975)*nd$se.fit 
-nd$fittedP = bbest$modelInfo$family$linkinv(nd$fit) # convert fit & CI to probabilities
-nd$lwrCIP = bbest$modelInfo$family$linkinv(nd$lwr_link)
-nd$uprCIP =  bbest$modelInfo$family$linkinv(nd$upr_link)
-ndRate = as.data.frame(predict(zbest,newdata=nd,type='link',se.fit = TRUE))
-ndRate$lwr_linkR = ndRate$fit + qnorm(0.025)*ndRate$se.fit # convert se to CI on link scale
-ndRate$upr_linkR = ndRate$fit + qnorm(0.975)*ndRate$se.fit 
-ndRate$fittedR = zbest$modelInfo$family$linkinv(ndRate$fit) # convert fit & CI to probabilities 
-ndRate$lwrCIR = zbest$modelInfo$family$linkinv(ndRate$lwr_link)
-ndRate$uprCIR =  zbest$modelInfo$family$linkinv(ndRate$upr_link)  
-nd = cbind(nd,ndRate)
-emm_jMB = summaryBy(cbind(fittedP,lwrCIP,uprCIP,fittedR,lwrCIR,uprCIR)~J,data=nd,FUN=mean,keep.names=TRUE) 
-emm_jMB$edate<-as.Date('2010-12-31')+emm_jMB$J
+## Annual FX overall
+# code actually used in Caiger et al for annual fx
+emm_options(rg.limit = 200000)
+
+J<-seq(273,365,by=3)
+Jsin<-sin(2*pi*(J/365))
+Jcos<-cos(2*pi*(J/365))
+edate<-as.Date('2010-12-31')+J
+df_j<-data.frame(J,Jsin,Jcos,edate)
+emm_j_pg<-as.data.frame(emmeans(bbest,~Jsin+Jcos,at=list(J=J,Jsin=Jsin,Jcos=Jcos)),type='response')
+emm_j_rg<-as.data.frame(emmeans(zbest,~Jsin+Jcos,at=list(J=J,Jsin=Jsin,Jcos=Jcos)),type='response')
+emm_j_pg<-merge(df_j,emm_j_pg)
+emm_j_rg<-merge(df_j,emm_j_rg)
+# the merge function matches all instances of paired Jsin, Jcos in df_j with the corresponding response/prob and CI from emm_j
+# it does not take the max or the average
+
+emm_jMB = df_j
+emm_jMB$fittedP = emm_j_pg$prob
+emm_jMB$lwrCIP = emm_j_pg$lower.CL
+emm_jMB$uprCIP = emm_j_pg$upper.CL
+emm_jMB$fittedR = emm_j_rg$response
+emm_jMB$lwrCIR = emm_j_rg$lower.CL
+emm_jMB$uprCIR = emm_j_rg$upper.CL
+
+
 
 ## Write Model fits to csv files since code takes prediction take so long to run
 write.csv(emm_hMB, "data/emm_DielFX.csv")
@@ -386,9 +469,9 @@ write.csv(emm_jMB,"data/emm_AnnualFx_365.csv")
 
 ```{r}
 # Cox Ledge
-emm_hCox = read.csv("data/emm_DielFX_Cox.csv", header = TRUE)
-emm_lCox = read.csv("data/emm_LunarFX_Cox.csv", header = TRUE)
-emm_jCox = read.csv("data/emm_AnnualFx_Cox.csv", header = TRUE)
+emm_hCox = read.csv("data/emm_DielFX_Cox_v2.csv", header = TRUE)
+emm_lCox = read.csv("data/emm_LunarFX_Cox_v2.csv", header = TRUE)
+emm_jCox = read.csv("data/emm_AnnualFx_Cox_v2.csv", header = TRUE)
 # Mass Bay
 emm_hMB = read.csv("data/emm_DielFX.csv", header = TRUE)
 emm_lMB = read.csv("data/emm_LunarFX.csv", header = TRUE)
@@ -534,27 +617,286 @@ grid.arrange(DayMB,DayCox,nrow = 1, ncol = 2)
 
 ```
 
-## Mass Bay Additional Figures - I don't think I need these
+##### Mass Bay model averaging code
+
+## Load libraries
 
 ```{r}
-#ANNUAL x SITE FX
+library(plotrix)
+library(suncalc)
+library(lunar)
+library(ggplot2)
+library(tidyverse)
+library(gridExtra)
+library(circular)
+library(pscl)
+library(maptools)
+library(rgdal)
+library(rgeos)
+library(glmmTMB)
+library(emmeans)
+library(doBy)
+library(MASS)
+library(plyr)
+library(ggspatial)
+#library(rasterVis)
+library(ggsn)
+library(grid)
+library(itsadug)
+library(car)
+
+```
+
+## Functions needed
+
+```{r}
+ 
+LIC<-function(x,crit="AIC"){
+    if(crit=="AIC"){IC<-function(x,...)AIC(x,...)}
+    if(crit=="BIC"){IC<-function(x,...)BIC(x,...)}
+    out<-NULL
+    for(i in 1:length(x)){
+      ic<-try(IC(x[[i]]))
+      this<-NA
+      if(!'try-error'%in%class(ic))this<-ic
+      out<-c(out,this)
+    }
+    return(out)
+  }
+  
+  #CALC EQUIVALENT DF FOR A GAM, GLM, etc
+edf<-function(x){
+    isbad<-'try-error'%in%class(try(nobs(x),silent=TRUE))
+    if(!isbad)return(nobs(x)-df.residual(x))
+    if(isbad)return(NA)
+  } 
+
+ictab<-function(x){
+    modz<-names(x)
+    aicz<-LIC(x,crit="AIC")
+    bicz<-LIC(x,crit="BIC")
+    dfz<-unlist(lapply(x,FUN=edf))
+    dfz<-round(unlist(lapply(x,FUN=edf)),3)
+    daicz<-round(aicz-min(aicz,na.rm=TRUE),1)
+    dbicz<-round(bicz-min(bicz,na.rm=TRUE),1)
+    wa<-aicz; wa[is.na(wa)]<-Inf;  # wa<-round(Weights(wa),3) # Weights(wa) was erroring
+    wb<-bicz; wb[is.na(wb)]<-Inf;  # wb<-round(Weights(wb),3) # Weights(wb) was erroring
+    #de<-round(unlist(lapply(x,FUN=devexp)),1)
+    df<-data.frame(mod=modz,wA=wa,wB=wb,dAIC=daicz,dBIC=dbicz,AIC=aicz,BIC=bicz,edf=dfz)
+    rownames(df)<-NULL
+    return(df)
+  }
+  
+# this is why the 
+  predict_multimod<-function(modz,weights=rep(1,length(modz)),newdata=NULL,type='response',se.fit=FALSE){
+    out<-NULL
+    for(m in modz){
+      this<-predict(m,newdata=newdata,type=type,se.fit=se.fit)
+      out<-cbind(out,this)
+    }
+    weights<-weights/sum(weights) #NORMALIZE TO SUM TO 1
+    return(rowSums(t(t(out)*weights)))
+  }
+  
+ make_circ<-function(d){
+    out<-d
+    namez<-names(d)
+    if("H"%in%namez){
+      out$Hsin<-sin(2*pi*(out$H/24))
+      out$Hcos<-cos(2*pi*(out$H/24))
+    }
+    if("J"%in%namez){
+      out$Jsin<-sin(2*pi*(out$J/365))
+      out$Jcos<-cos(2*pi*(out$J/365))
+    }
+    if("MOON"%in%namez){
+      out$Msin<-sin(out$MOON)
+      out$Mcos<-cos(out$MOON)
+      out$MOON2<-out$MOON
+      out$MOON2[out$MOON2>pi]<-out$MOON2[out$MOON2>pi]-pi
+      out$MOON2<-2*out$MOON2
+      out$Lsin<-sin(out$MOON2) #SEMI-LUNAR
+      out$Lcos<-cos(out$MOON2) #SEMI-LUNAR
+    }
+    return(out)
+  }
+
+ unfun<-function(form){
+      y<-as.character(form)
+      x<-y[length(y)]
+      x<-gsub("Site","S",x)
+      x<-gsub("Hsin","H",x)
+      x<-gsub("Hcos","H",x)
+      x<-gsub("Msin","L1",x)
+      x<-gsub("Mcos","L1",x)
+      x<-gsub("Jsin","J",x)
+      x<-gsub("Jcos","J",x)
+      x<-gsub("Lsin","L2",x)
+      x<-gsub("Lcos","L2",x)
+      x<-gsub("\\(1 \\| WK\\)","rW",x)
+      x<-gsub("\\(1 \\| DAY\\)","rD",x)
+      vs<-c("H","L1","J","L2","S:J","Y:J","D:M")
+      for(v in vs){
+        vv<-paste(v,"+",v)
+        x<-gsub(vv,v,x,fixed=TRUE)  
+      }
+      return(x)
+    }
+
+```
+
+## Load data
+
+```{r}
+load("data/gsub.rdat")
+load("data/pam_mixed_modz.rdat")
+
+```
+
+## Identify top models for model averaging
+
+```{r}
+  names(bmodz)<-paste("b",1:length(bmodz),sep="")
+  btab<-ictab(bmodz) # only got this to run by commenting out part of the ictab function
+  btab$mod<-names(bmodz) 
+  btab$form<-unlist(lapply(bmodz,function(x){unfun(x[["modelInfo"]]$allForm$formula)}))
+  btab$loglik<-unlist(lapply(bmodz,logLik))
+  btab$dup<-duplicated(btab[,-1])
+  btab$CAND<-grepl("rW",btab$form)&!is.na(btab$AIC)&!btab$dup #A CANDIDATE MODEL FORM?
+  btab$dAIC[btab$CAND]<-btab$AIC[btab$CAND]-min(btab$AIC[btab$CAND],na.rm=TRUE)
+  btab$w<-round(exp(-0.5*btab$dAIC)/sum(exp(-0.5*btab$dAIC),na.rm=TRUE),4)
+  btab$PRED<-btab$w>0.1&!is.na(btab$w)
+  btab<-btab[order(-btab$CAND,btab$AIC),][c("mod","form","loglik","AIC","dAIC","w","edf","PRED")]
+  btab
+  write.csv(btab,file="data/bmod_aic.csv")
+  
+  #zmodz<-list(z_0,z_w,z_w1,z_w2,z_w3,z_w_z1,z_w_z2,z_w_z3,z_w_z4,z_w_z5,z_w_z6,z_w_z9,z_w_z10,z_w_z11,z_w_z12,z_w_z13,z_w_z14)
+  #names(zmodz)<-lapply(zmodz,FUN=function(x){unfun(formula(x))})
+  #zmodz[[length(zmodz)+1]]<-zxx5
+  names(zmodz)<-paste("z",1:length(zmodz),sep="")
+  ztab<-ictab(zmodz)
+  ztab$mod<-names(zmodz)
+  ztab$form<-unlist(lapply(zmodz,function(x){unfun(x[["modelInfo"]]$allForm$formula)}))
+  ztab$ziform<-unlist(lapply(zmodz,function(x){unfun(x[["modelInfo"]]$allForm$ziformula)}))
+  ztab$loglik<-unlist(lapply(zmodz,logLik))
+  ztab$dup<-duplicated(ztab[,-1])
+  ztab$CAND<-grepl("rW",ztab$form)&!grepl("DEPTH",ztab$form)&!is.na(ztab$AIC)&!ztab$dup
+  ztab$dAIC[ztab$CAND]<-ztab$AIC[ztab$CAND]-min(ztab$AIC[ztab$CAND],na.rm=TRUE)
+  ztab$w<-round(exp(-0.5*ztab$dAIC)/sum(exp(-0.5*ztab$dAIC),na.rm=TRUE),4)
+  ztab$PRED<-ztab$w>0.1&!is.na(ztab$w)
+  ztab<-ztab[order(-ztab$CAND,ztab$AIC),][c("mod","form","ziform","loglik","AIC","dAIC","w","edf","PRED")]
+  ztab
+  write.csv(ztab,file="data/zmod_aic.csv")
+
+bbest_mm<-bmodz[btab$mod[btab$PRED]]
+zbest_mm<-zmodz[ztab$mod[ztab$PRED]]
+bbest_wts<-btab$w[match(names(bbest_mm),btab$mod)]
+zbest_wts<-ztab$w[match(names(zbest_mm),ztab$mod)]
+
+```
+
+## Summarize estimated marginal means
+
+```{r}
+  #DIEL FX
+  print("Diel FX")
+  nd<-expand.grid(Y=as.character(unique(gsub$Y)),Site=as.character(unique(gsub$Site)),J=335,MOON=pi,H=0:24,WK=NA,DAY=NA,DEPTH=50)
+  nd<-make_circ(nd)
+  #nd$pG<-predict(bbest,newdata=nd,type='response')
+  #nd$rG<-predict(zbest,newdata=nd,type='response')
+  #nd$pG<-predict_multimod(bbest_mm,weights=bbest_wts,newdata=nd,type='response')
+  #nd<-cbind(nd,
+  test = predict_multimod(bbest_mm,weights=bbest_wts,newdata=nd,type='response', se.fit = TRUE)
+  testLink = predict_multimod(bbest_mm,weights=bbest_wts,newdata=nd,type='link', se.fit = TRUE)
+  nd$rG<-predict_multimod(zbest_mm,weights=zbest_wts,newdata=nd,type='response')
+  emm_h<-summaryBy(cbind(pG,rG)~H,data=nd,FUN=mean,keep.names=TRUE)
+  
+  #LUNAR FX
+  print("Lunar FX")
+  nd<-expand.grid(Y=as.character(unique(gsub$Y)),Site=as.character(unique(gsub$Site)),J=335,MOON=seq(0,2*pi,length=16),H=0,WK=NA,DAY=NA,DEPTH=50)
+  nd<-make_circ(nd)
+  #nd$pG<-predict(bbest,newdata=nd,type='response')
+  #nd$rG<-predict(zbest,newdata=nd,type='response')
+  nd$pG<-predict_multimod(bbest_mm,weights=bbest_wts,newdata=nd,type='response')
+  nd$rG<-predict_multimod(zbest_mm,weights=zbest_wts,newdata=nd,type='response')
+  emm_l<-summaryBy(cbind(pG,rG)~MOON,data=nd,FUN=mean,keep.names=TRUE) 
+  
+  #SEASONAL FX - OVERALL
+  print("Seasonal FX")
+  nd<-expand.grid(Y=as.character(unique(gsub$Y)),Site=as.character(unique(gsub$Site)),J=275:400,MOON=pi,H=0,WK=NA,DAY=NA,DEPTH=50)
+  nd<-make_circ(nd)
+  #nd$pG<-predict(bbest,newdata=nd,type='response')
+  #nd$rG<-predict(zbest,newdata=nd,type='response')
+  nd$pG<-predict_multimod(bbest_mm,weights=bbest_wts,newdata=nd,type='response')
+  nd$rG<-predict_multimod(zbest_mm,weights=zbest_wts,newdata=nd,type='response')
+  emm_j<-summaryBy(cbind(pG,rG)~J,data=nd,FUN=mean,keep.names=TRUE)
+  emm_j$edate<-as.Date('2010-12-31')+emm_j$J
+  
+  #SEASONAL x SITE FX
+  print("Seasonal X Site FX")
   nd<-expand.grid(Y=as.character(unique(gsub$Y)),Site=as.character(unique(gsub$Site)),J=282:365,MOON=pi,H=0,WK=NA,DAY=NA,DEPTH=50)
   nd<-make_circ(nd)
-  nd$pG<-predict(bbest,newdata=nd,type='response')
-  nd$rG<-predict(zbest,newdata=nd,type='response')
+  #nd$pG<-predict(bbest,newdata=nd,type='response')
+  #nd$rG<-predict(zbest,newdata=nd,type='response')
+  nd$pG<-predict_multimod(bbest_mm,weights=bbest_wts,newdata=nd,type='response')
+  nd$rG<-predict_multimod(zbest_mm,weights=zbest_wts,newdata=nd,type='response')
   emm_js<-summaryBy(cbind(pG,rG)~J+Site,data=nd,FUN=mean,keep.names=TRUE)
   emm_js$edate<-as.Date('2010-12-31')+emm_js$J
   sitz<-unique(emm_js$Site)
   peakz<-NULL
   for(s in 1:length(sitz)){
     sub<-subset(emm_js,Site==sitz[s])
-  pG<-sub$edate[sub$pG==max(sub$pG)]
+    pk_pG<-sub$edate[sub$pG==max(sub$pG)]
     pk_rG<-sub$edate[sub$rG==max(sub$rG)]
-    df<-dat  pk_a.frame(Site=sitz[s],peak_pG=pk_pG,peak_rg=pk_rG)
+    df<-data.frame(Site=sitz[s],peak_pG=pk_pG,peak_rg=pk_rG)
     peakz<-rbind(peakz,df)
   }
   
- 
+  #SITE FX
+  print("Site FX")
+  nd<-expand.grid(Y=as.character(unique(gsub$Y)),Site=as.character(unique(gsub$Site)),J=282:365,MOON=pi,H=0,WK=NA,DAY=NA,DEPTH=50)
+  nd<-make_circ(nd)
+  #nd$pG<-predict(bbest,newdata=nd,type='response')
+  #nd$rG<-predict(zbest,newdata=nd,type='response')
+  nd$pG<-predict_multimod(bbest_mm,weights=bbest_wts,newdata=nd,type='response')
+  nd$rG<-predict_multimod(zbest_mm,weights=zbest_wts,newdata=nd,type='response')
+  emm_s<-summaryBy(cbind(pG,rG)~Site,data=nd,FUN=mean,keep.names=TRUE)
+  
+  #ANNUAL
+  print("Annual FX")
+  nd<-expand.grid(Y=as.character(unique(gsub$Y)),Site=as.character(unique(gsub$Site)),J=282:365,MOON=pi,H=0,WK=NA,DAY=NA,DEPTH=50)
+  nd<-make_circ(nd)
+  #nd$pG<-predict(bbest,newdata=nd,type='response')
+  #nd$rG<-predict(zbest,newdata=nd,type='response')
+  #nd$pG<-predict_multimod(bbest_mm,weights=bbest_wts,newdata=nd,type='response')
+  annualSE = predict_multimod(bbest_mm, weights=bbest_wts,newdata=nd,type='link',se.fit = TRUE)
+  #nd$rG<-predict_multimod(zbest_mm,weights=zbest_wts,newdata=nd,type='response')
+  annualSErate = predict_multimod(zbest_mm, weights=zbest_wts,newdata=nd,type='link',se.fit = TRUE)
+
+   emm_y<-summaryBy(cbind(pG,rG)~Y,data=nd,FUN=mean,keep.names=TRUE)
+  #emm_y<-summaryBy(pG~Y,data=nd,FUN=mean,keep.names=TRUE)
+  emm_y$Y<-as.numeric(as.character(emm_y$Y))
+  emm_y<-emm_y[order(emm_y$Y),]
+  plot(pG~Y,data=emm_y,type='l')
+  
+  #emm_ys<-summaryBy(cbind(pG,rG)~Y+Site,data=nd,FUN=mean,keep.names=TRUE)
+  emm_ys<-summaryBy(pG~Y+Site,data=nd,FUN=mean,keep.names=TRUE)
+  emm_ys$Y<-as.numeric(as.character(emm_ys$Y))
+  emm_ys<-emm_ys[order(emm_ys$Y),]
+  
+  sitz<-unique(emm_ys$Site)
+  emm_ys$SiteY<-paste(emm_ys$Site,emm_ys$Y,sep="_")
+  plot(pG~Y,data=emm_ys,col=Site,type='n')
+  for(s in 1:length(sitz)){
+    ltx<-ceiling(s/8)
+    lines(pG~Y,data=emm_ys,subset=Site==sitz[s],col=alpha(s,0.33),lty=ltx)
+    esub<-subset(emm_ys,SiteY%in%gsub$SiteY)
+    lines(pG~Y,data=esub,subset=Site==sitz[s],col=s,lwd=2,lty=ltx)
+  }
+  legend("topleft",legend=sitz,col=1:length(sitz),cex=0.85,lty=ceiling((1:length(sitz))/8),lwd=2)
+  
+}
+
 #GGPLOT FIGURE of DIEL, LUNAR FX
 if(TRUE){
   alf<-0.5
@@ -584,7 +926,7 @@ if(TRUE){
       ) +
       ggtitle("Grunt Presence")+
       geom_text(data=labz_h, aes(x=H, y=!!ymx, label=lab, hjust=0.5), color="black", size=4 ) 
-  pg_circ_h  
+    
   
   #LUNAR PRESENCE
   seq_l<-seq(0,2*pi,length=32)
@@ -601,7 +943,7 @@ if(TRUE){
     ) +
     xlab("Lunar")+
     geom_text(data=labz_l, aes(x=MOON, y=!!ymx, label=lab, hjust=0.5), color="black", size=4 ) 
-  pg_circ_l
+  
   
   ############
   #RATE
@@ -625,7 +967,6 @@ if(TRUE){
     ) +
     ggtitle("Grunt Rate")+
     geom_text(data=labz_h, aes(x=H, y=!!ymx, label=lab, hjust=0.5), color="black", size=4 ) 
-  rg_circ_h
   
   #LUNAR RATE
   seq_l<-seq(0,2*pi,length=32)
@@ -641,272 +982,15 @@ if(TRUE){
       plot.title = element_text(hjust=0.5,vjust=1)
     ) +
     geom_text(data=labz_l, aes(x=MOON, y=!!ymx, label=lab, hjust=0.5), color="black", size=4 ) 
-  rg_circ_l
   
   grid.arrange(pg_circ_h,rg_circ_h,pg_circ_l,rg_circ_l,nrow=2)
   
   ht<-5 #HEIGHT OF PLOT IN INCHES
   nr<-2; nc<-2; lmat<-matrix(seq_len(nr*nc),nrow=nr,ncol=nc,byrow=TRUE)
-  ggsave("diel_lunar_fx.jpg",marrangeGrob(list(pg_circ_h,rg_circ_h,pg_circ_l,rg_circ_l),layout_matrix=lmat,top="",padding=unit(0,"line")),width=ht*1,height=ht,dpi=600)
+  #ggsave("diel_lunar_fx.jpg",marrangeGrob(list(pg_circ_h,rg_circ_h,pg_circ_l,rg_circ_l),layout_matrix=lmat,top="",padding=unit(0,"line")),width=ht*1,height=ht,dpi=600)
+  ggsave("diel_lunar_fx.pdf",marrangeGrob(list(pg_circ_h,rg_circ_h,pg_circ_l,rg_circ_l),layout_matrix=lmat,top="",padding=unit(0,"line")),width=ht*1,height=ht,dpi=600)
   
 }
 
-  
-
 ```
-
-### OLD CODE - not needed  ###
-
-## Original code for Cox Ledge data with pscl mixture model approach... instead use same approach as Mass Bay 
-
-Mixture model: compare poisson with neg binomial of global mode
-
-```{r}
-### Global Model
-
-# Zero-inflated Poisson: GLobal Model
-Zip1 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-                  dist = "poisson", link = "logit", data = cox)
-summary(Zip1)
-
-# Zero-inflated negative binomial: Global Model
-Zinb1 = zeroinfl(n_grunts ~ SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + sday + cday + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-summary(Zinb1)
-
-# Zero-inflated negative binomial: Global Model, day as quadratic
-
-Zinbq = zeroinfl(n_grunts ~ SpawnSeason + J_center + daySq + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + J_center + daySq + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-summary(Zinbq)
-
-# likelihood ratio test between the poisson and neg bin models
-# proceed with negative binomial 
-lrtest(Zip1, Zinb1) 
-AIC(Zip1, Zinb1, Zinbq)
-```
-
-## Moving forward with Negative Binomial - build candidate models
-
-Caiger et al (Mass Bay paper): best models used as candidate models for Cox Ledge data set 
-```{r}
-### Candidate models: hypotheses based on Mass Bay results
- 
-# Global Model
-globalMod = zeroinfl(n_grunts ~ SpawnSeason + J_center + daySq + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + J_center + daySq + shour + chour + sLunar + cLunar + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox, na.action = na.fail)
-
-# no lunar terms in zero process
-Mod1 = zeroinfl(n_grunts ~ SpawnSeason + J_center + daySq + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + J_center + daySq + shour + chour,
-                  dist = "negbin", link = "logit", data = cox)
-
-# Only L1 in zero process
-Mod2 = zeroinfl(n_grunts ~ SpawnSeason + J_center + daySq + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + J_center + daySq + shour + chour + sLunar + cLunar,
-                  dist = "negbin", link = "logit", data = cox)
-
-# Only L2 in zero process
-Mod3 = zeroinfl(n_grunts ~ SpawnSeason + J_center + daySq + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + J_center + daySq + shour + chour + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-
-# Only L2 in count processes, no lunar in zero
-Mod4 = zeroinfl(n_grunts ~ SpawnSeason + J_center + daySq + shour + chour + sLunar2 + cLunar2 |
-                  SpawnSeason + J_center + daySq + shour + chour,
-                  dist = "negbin", link = "logit", data = cox)
-
-model.sel(globalMod, Mod1, Mod2, Mod3, Mod4)
-# Mod 3 (only L2 in zero-process) has lowest AIC, delta is 10 to next best
-
-
-```
-
-# Final model summary & estimated marginal means
-
-Questions: 
-1. How to extract predictions & CI from the zero and count processes of the model with circular variables
-
-```{r}
-codMod = zeroinfl(n_grunts ~ SpawnSeason + J_center + daySq + shour + chour + sLunar + cLunar + sLunar2 + cLunar2 |
-                  SpawnSeason + J_center + daySq + shour + chour + sLunar2 + cLunar2,
-                  dist = "negbin", link = "logit", data = cox)
-summary(codMod)
-
-# codMod2 = zeroinfl(n_grunts ~ SpawnSeason + poly(J_center,2) + circHour + sLunar + cLunar + sLunar2 + cLunar2 |
-#                   SpawnSeason + poly(J_center,2) + circHour + sLunar2 + cLunar2,
-#                   dist = "negbin", link = "logit", data = cox)
-# summary(codMod2)
-# 
-# cox$circHour = as.circular(cox$hour, type = "angles", units = "radians")
-
-
-# prep for obs vs predicted plot
-#library(broom)
-#coxPred = augment(codMod, cox)
-
-testPred = predict(codMod)
-
-# Exploring options with emmeans functions
-
-test_grid = ref_grid(codMod)
-
-## Estimated marginal means
-emm_year_pres = emmeans(codMod, ~ SpawnSeason, mode = "zero")
-emm_year_rate = emmeans(codMod, ~ SpawnSeason, mode = "count")
-
-plot(emm_year_pres)
-plot(emm_year_rate)
-
-emm_hour_pres = emmeans(codMod, ~shour+chour, mode = "zero")
-emm_hour_rate = emmeans(codMod, ~shour+chour, mode = "count")
-
-#emm_lunar_pres = emmeans(codMod, ~sLunar+cLunar, mode = "zero") # lunar not in zero process
-emm_lunar_rate = emmeans(codMod, ~sLunar+cLunar, mode = "count")
-
-emm_lunar2_pres = emmeans(codMod, ~ sLunar2+cLunar2, mode = "zero")
-emm_lunar2_rate = emmeans(codMod, ~ sLunar2+cLunar2, mode = "count")
-# does this show the expected change in rate, given 1 change in lunar2?
-# does that make sense for circular?
-plot(emm_lunar2_rate)
-
-# Alternative
-library(ggeffects)
-
-ggpredict(codMod, ~shour+chour, type = "zero_inflated")
-# this produced output with CI, but I don't think its correct (circular variables not accounted for)
-
-```
-
-## Calculating emmeans following Micah's code
-- doesn't work for the new quadratic day variables
-- this manually makes reference grid and predicts on this grid, how do I get CI?
-
-```{r}
-# interpret how they calculated emmeans on circular variables. Set others to their mean and calculated effects?
-
-# Micah's function to calculate circular variables from dataframe input
-make_circ<-function(d){
-    out<-d
-    namez<-names(d)
-    if("hour"%in%namez){
-      out$shour<-sin(2*pi*(out$hour/24))
-      out$chour<-cos(2*pi*(out$hour/24))
-    }
-    # if("day"%in%namez){  #original code for when model included circular day
-    #   out$sday<-sin(2*pi*(out$day/365))
-    #   out$cday<-cos(2*pi*(out$day/365))
-    # }
-    # if("day"%in%namez){  # my attempt to update this function for the circular variable (it didn't work)
-    #   out$J_center<-out$J_center
-    #   out$daysq<-out$J_center^2
-    # }
-    if("Lunar"%in%namez){
-      out$sLunar<-sin(out$Lunar)
-      out$cLunar<-cos(out$Lunar)
-      out$Lunar2<-out$Lunar
-      out$Lunar2[out$Lunar2>pi]<-out$Lunar2[out$Lunar2>pi]-pi
-      out$Lunar2<-2*out$Lunar2
-      out$sLunar2<-sin(out$Lunar2) #SEMI-LUNAR
-      out$cLunar2<-cos(out$Lunar2) #SEMI-LUNAR
-    }
-    return(out)
-  }
-
-## Diel Estimated marginal means following Micah's code 
-# Day = 309 (mean day of presence), Full moon
-nHour = expand.grid(SpawnSeason=as.character(unique(cox$SpawnSeason)), J_center=-0.7321493, daySq=0.5360426, Lunar=pi, hour=0:23)
-nHour = make_circ(nHour)
-nHour$presence = predict(codMod, newdata=nHour, type='zero', se.fit = )
-nHour$rate = predict(codMod, newdata=nHour, type='count') 
-emm_h = summaryBy(cbind(presence,rate)~hour,data=nHour,FUN=mean,keep.names=TRUE)
-
-
-## Lunar EMM
-nLunar = expand.grid(SpawnSeason=as.character(unique(cox$SpawnSeason)), J_center=-0.7321493, daySq=0.5360426,
-                    Lunar=seq(0,2*pi,length=16),hour=0)
-nLunar = make_circ(nLunar)
-nLunar$presence = predict(codMod, newdata=nLunar, type='zero')
-nLunar$rate = predict(codMod, newdata=nLunar, type='count')
-emm_l<-summaryBy(cbind(presence,rate)~Lunar,data=nLunar,FUN=mean,keep.names=TRUE) 
-
-## Seasonal effect 
-J_centerRange = unique(cox$J_center)
-daySqRange = unique(cox$daySq)
-nDay = expand.grid(SpawnSeason=as.character(unique(cox$SpawnSeason)),J_center=J_centerRange, daySq = daySqRange ,Lunar=pi,hour=0)
-nDay = make_circ(nDay)
-nDay$presence = predict(codMod, newdata=nDay, type='zero')
-nDay$rate = predict(codMod, newdata=nDay, type='count')
-emm_j<-summaryBy(cbind(presence,rate)~J_center,data=nDay,FUN=mean,keep.names=TRUE)
-
-# my edits to make this dataframe work with the date range
-# emm_j$month = c(rep(1,31),rep(10, 31), rep(11,30), rep(12,31))
-# emm_j$date = c(1:31,1:31,1:30,1:31)
-# emm_j$SSorder = emm_j$day
-# emm_j$SSorder[1:31] = emm_j$SSorder[1:31]+365
-
-
-```
-
-## Plot EM Means with ggplot
-
-```{r}
-
-# Diel
-ggplot(data=emm_h, aes(x=hour, y = presence))+ theme_bw()+
-  coord_polar(start = 0)+
-  geom_line(size = 1)+
-  scale_x_continuous(name = "Hour", breaks = c(6,12,18,24), labels = c("6", "12", "18","24"))+
-  scale_y_continuous(name = "Grunt Presence")+
-  theme(axis.title = element_text(size = 14),
-        axis.text = element_text(size = 12))
-
-ggplot(data=emm_h, aes(x=hour, y = rate))+ theme_bw()+
-  coord_polar(start = 0)+
-  geom_line(size = 1)+
-  scale_x_continuous(name = "Hour", breaks = c(6,12,18,24), labels = c("6", "12", "18","24"))+
-  scale_y_continuous(name = "Grunt Rate")+
-  theme(axis.title = element_text(size = 14),
-        axis.text = element_text(size = 12))
-
-#Lunar
-# the rate association is weird
-ggplot(data=emm_l, aes(x=Lunar, y = presence))+ theme_bw()+
-  coord_polar(start = 0)+
-  geom_line(size = 1)+
-  scale_x_continuous(name = "Lunar cycle", breaks = c(0,pi/2, pi, 3*pi/2),labels = c("New", "Waxing","Full","Waning"))+
-  scale_y_continuous(name = "Grunt Presence")+
-  theme(axis.title = element_text(size = 14),
-        axis.text = element_text(size = 12))
-
-ggplot(data=emm_l, aes(x=Lunar, y = rate))+ theme_bw()+
-  coord_polar(start = 0)+
-  geom_line(size = 1)+
-  scale_x_continuous(name = "Lunar cycle", breaks = c(0,pi/2, pi, 3*pi/2),labels = c("New", "Waxing","Full","Waning"))+
-  scale_y_continuous(name = "Grunt Rate")+
-  theme(axis.title = element_text(size = 14),
-        axis.text = element_text(size = 12))
-
-# Seasonal
-# these estimates are still weird - makes me less confident in the model
-ggplot(data=emm_j, aes(x=J_center, y = presence))+ theme_bw()+
-  geom_line(size = 1)+
-  #scale_x_continuous(name = "Month", breaks = c(274,305,335,366), labels = c("Oct", "Nov", "Dec","Jan"))+
-  theme(axis.title = element_text(size = 14),
-        axis.text = element_text(size = 12))
-
-ggplot(data=emm_j, aes(x=J_center, y = rate))+ theme_bw()+
-  geom_line(size = 1)+
-  #scale_x_continuous(name = "Month", breaks = c(274,305,335,366), labels = c("Oct", "Nov", "Dec","Jan"))+
-  theme(axis.title = element_text(size = 14),
-        axis.text = element_text(size = 12))
-
-
-```
-
-
 
