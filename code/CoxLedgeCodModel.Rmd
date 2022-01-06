@@ -315,7 +315,7 @@ ndRate$lwrCIR = ndRate$fit + qnorm(0.025)*ndRate$se.fit # convert se to CI on li
 ndRate$uprCIR = ndRate$fit + qnorm(0.975)*ndRate$se.fit 
 ndRate$fittedR = ndRate$fit
 nd = cbind(nd,ndRate[,c(3:5)])
-emm_lMB = summaryBy(cbind(fittedP,lwrCIP,uprCIP,fittedR,lwrCIR,uprCIR)~Lunar,data=nd,FUN=mean,keep.names=TRUE)
+emm_hMB = summaryBy(cbind(fittedP,lwrCIP,uprCIP,fittedR,lwrCIR,uprCIR)~H,data=nd,FUN=mean,keep.names=TRUE)
 
 
 #LUNAR FX
@@ -330,7 +330,7 @@ ndRate$lwrCIR = ndRate$fit + qnorm(0.025)*ndRate$se.fit
 ndRate$uprCIR = ndRate$fit + qnorm(0.975)*ndRate$se.fit 
 ndRate$fittedR = ndRate$fit
 nd = cbind(nd,ndRate[,c(3:5)])
-emm_lMB = summaryBy(cbind(fittedP,lwrCIP,uprCIP,fittedR,lwrCIR,uprCIR)~Lunar,data=nd,FUN=mean,keep.names=TRUE)
+emm_lMB = summaryBy(cbind(fittedP,lwrCIP,uprCIP,fittedR,lwrCIR,uprCIR)~MOON,data=nd,FUN=mean,keep.names=TRUE)
 
 
 ## Annual FX overall
@@ -347,9 +347,11 @@ emm_j_rg<-as.data.frame(emmeans(zbest,~Jsin+Jcos,at=list(J=J,Jsin=Jsin,Jcos=Jcos
 emm_j_pg<-merge(df_j,emm_j_pg)
 emm_j_rg<-merge(df_j,emm_j_rg)
 # the merge function matches all instances of paired Jsin, Jcos in df_j with the corresponding response/prob and CI from emm_j
-# it does not take the max or the average
 
-emm_jMB = df_j
+emm_jMB = as.data.frame(c(31:1))
+colnames(emm_jMB) = "X"
+emm_jMB$J = emm_j_pg$J
+emm_jMB$edate = emm_j_pg$edate
 emm_jMB$fittedP = emm_j_pg$prob
 emm_jMB$lwrCIP = emm_j_pg$lower.CL
 emm_jMB$uprCIP = emm_j_pg$upper.CL
@@ -381,45 +383,38 @@ emm_jMB = read.csv("data/emm_AnnualFx_365.csv", header = TRUE)
 # Presence 
 
 ## Diel
-ggplot(data=emm_hMB, aes(x=H, y = fittedP))+ theme_bw()+
+dielPres = ggplot(data=emm_hMB, aes(x=H, y = fittedP))+ theme_bw()+
   coord_polar(start = 0)+
   geom_line(size = 1)+
-  geom_ribbon(aes(ymin = lwrCIP, ymax = uprCIP,alpha = 2))+
+  geom_ribbon(aes(ymin = lwrCIP, ymax = uprCIP,alpha = 2),show.legend = FALSE)+
   geom_line(data = emm_hCox, aes(x = hour, y = fittedP), size = 1, color = "blue")+
-  geom_ribbon(data= emm_hCox, aes(x = hour, ymin = lwrCIP, ymax = uprCIP, alpha = 2))+
-  scale_x_continuous(name = "Hour", breaks = c(6,12,18,24), labels = c("6", "12", "18","24"))+
+  geom_ribbon(data= emm_hCox, aes(x = hour, ymin = lwrCIP, ymax = uprCIP, alpha = 2), fill = "blue", show.legend = FALSE)+
+  scale_x_continuous(name = "", breaks = c(6,12,18,24), labels = c("6", "12", "18","24"))+
   scale_y_continuous(name = "Grunt Presence")+
   theme(axis.title = element_text(size = 14),
         axis.text = element_text(size = 12))
 
 ## Lunar
-ggplot(data=emm_lMB, aes(x=MOON, y = fittedP))+ theme_bw()+
+lunarPres = ggplot(data=emm_lMB, aes(x=MOON, y = fittedP))+ theme_bw()+
   coord_polar(start = 0)+
   geom_line(size = 1)+
-  geom_ribbon(aes(ymin = lwrCIP, ymax = uprCIP, alpha = 2))+
+  geom_ribbon(aes(ymin = lwrCIP, ymax = uprCIP, alpha = 2), show.legend = FALSE)+
   geom_line(data = emm_lCox, aes(x = Lunar, y = fittedP), size = 1, color = "blue")+
-  geom_ribbon(data= emm_lCox, aes(x = Lunar, ymin = lwrCIP, ymax = uprCIP, alpha = 2))+
-  scale_x_continuous(name = "Lunar cycle", breaks = c(0,pi/2, pi, 3*pi/2),labels = c("New", "Waxing","Full","Waning"))+
+  geom_ribbon(data= emm_lCox, aes(x = Lunar, ymin = lwrCIP, ymax = uprCIP, alpha = 2), fill = "blue", show.legend = FALSE)+
+  scale_x_continuous(name = "", breaks = c(0,pi/2, pi, 3*pi/2),labels = c("New", "Waxing","Full","Waning"))+
   scale_y_continuous(name = "Grunt Presence")+
   theme(axis.title = element_text(size = 14),
         axis.text = element_text(size = 12))
 
+grid.arrange(dielPres, lunarPres, ncol = 2)
 
-## Day Effect
-# Edit date variables for plotting
-# emm_jMB$Date = ymd(emm_jMB$edate)
-# coxDates = ymd_hms(cox$DateTime)
-# coxEffort = date(coxDates)
-# coxEffort = unique(coxEffort)
-# coxEffort = coxEffort[1:123]
-# emm_jCox$Date = coxEffort
-
+## Annual 
 ggplot()+ theme_bw()+
   geom_line(aes(x = X, y = fittedP), size = 2, data = emm_jMB)+
   geom_ribbon(aes(x = X, ymin = lwrCIP, ymax = uprCIP, alpha = 2), data = emm_jMB, show.legend = FALSE)+
   geom_line(aes(x = X, y = fittedP), size = 2, color = "blue", data = emm_jCox)+
-  geom_ribbon(aes(x = X, ymin = lwrCIP, ymax = uprCIP, alpha = 2), data = emm_jCox, show.legend = FALSE)+
-  scale_x_continuous(name = "Date", breaks = c(1,32,62,93,124), labels = c("Oct 01", "Nov 01","Dec 01", "Jan 01", "Feb 01"))+
+  geom_ribbon(aes(x = X, ymin = lwrCIP, ymax = uprCIP, alpha = 2), data = emm_jCox, fill = "blue", show.legend = FALSE)+
+  scale_x_continuous(name = "Date", breaks = c(1,11,21,31,42), labels = c("Oct 01", "Nov 01","Dec 01", "Jan 01", "Feb 01"))+
   ylab("Probability of grunt presence")+
   theme(axis.title = element_text(size = 14),
         axis.text = element_text(size = 12))
@@ -439,7 +434,7 @@ dielMB = ggplot(data=emm_hMB, aes(x=H, y = fittedR))+ theme_bw()+
 dielCox = ggplot(data = emm_hCox, aes(x = hour, y = fittedR))+ theme_bw()+
   coord_polar(start = 0)+
   geom_line(size = 1, color = "blue")+
-  geom_ribbon(aes(ymin = lwrCIR, ymax = uprCIR, alpha = 2), show.legend = FALSE)+
+  geom_ribbon(aes(ymin = lwrCIR, ymax = uprCIR, alpha = 2), fill = "blue", show.legend = FALSE)+
   scale_x_continuous(name = "", breaks = c(6,12,18,24), labels = c("6", "12", "18","24"))+
   scale_y_continuous(name = "Grunt Rate")+
   theme(axis.title = element_text(size = 14),
@@ -459,7 +454,7 @@ lunarMB = ggplot(data=emm_lMB, aes(x=MOON, y = fittedR))+ theme_bw()+
 lunarCox = ggplot(data=emm_lCox, aes(x=Lunar, y = fittedR))+ theme_bw()+
   coord_polar(start = 0)+
   geom_line(size = 1, color = "blue")+
-  geom_ribbon(aes(ymin = lwrCIR, ymax = uprCIR, alpha = 2),show.legend = FALSE)+
+  geom_ribbon(aes(ymin = lwrCIR, ymax = uprCIR, alpha = 2),fill = "blue", show.legend = FALSE)+
   scale_x_continuous(name = "", breaks = c(0,pi/2, pi, 3*pi/2),labels = c("New", "Waxing","Full","Waning"))+
   scale_y_continuous(name = "Grunt Rate")+
   theme(axis.title = element_text(size = 14),
@@ -469,24 +464,34 @@ grid.arrange(dielMB, dielCox, lunarMB, lunarCox, nrow = 2, ncol = 2)
 
 
 # Day
-# the rate fit does not match their figs in the pub - likely because I did not use the model average
 DayMB = ggplot(data = emm_jMB, aes(x = X, y = fittedR))+ theme_bw()+
   geom_line(size = 2)+
-  #geom_ribbon(aes(ymin = lwrCIR, ymax = uprCIR, alpha = 2), show.legend = FALSE)+
-  scale_x_continuous(name = "", breaks = c(1,32,62,93), labels = c("Oct 01", "Nov 01","Dec 01", "Jan 01"))+
+  geom_ribbon(aes(ymin = lwrCIR, ymax = uprCIR, alpha = 2), show.legend = FALSE)+
+  scale_x_continuous(name = "", breaks = c(1,11,21,32), labels = c("Oct 01", "Nov 01","Dec 01", "Jan 01"))+
   ylab("Predicted grunt rate")+
   theme(axis.title = element_text(size = 14),
         axis.text = element_text(size = 12))
 
 DayCox = ggplot(data = emm_jCox, aes(x = X, y = fittedR))+ theme_bw()+
   geom_line(size = 2, color = "blue")+
-  geom_ribbon(aes(ymin = lwrCIR, ymax = uprCIR, alpha = 2), show.legend = FALSE)+
-  scale_x_continuous(name = "", breaks = c(1,32,62,93,124), labels = c("Oct 01", "Nov 01","Dec 01", "Jan 01", "Feb 01"))+
+  geom_ribbon(aes(ymin = lwrCIR, ymax = uprCIR, alpha = 2), fill = "blue", show.legend = FALSE)+
+  scale_x_continuous(name = "", breaks = c(1,11,21,31,42), labels = c("Oct 01", "Nov 01","Dec 01", "Jan 01", "Feb 01"))+
   ylab("Predicted grunt rate")+
   theme(axis.title = element_text(size = 14),
         axis.text = element_text(size = 12))
-
+ 
 grid.arrange(DayMB,DayCox,nrow = 1, ncol = 2)
+
+## Annual FX Rate on single plot
+# ggplot()+ theme_bw()+
+#   geom_line(aes(x = X, y = fittedR), size = 2, data = emm_jMB)+
+#   geom_ribbon(aes(x = X, ymin = lwrCIR, ymax = uprCIR, alpha = 2), data = emm_jMB, show.legend = FALSE)+
+#   geom_line(aes(x = X, y = fittedR), size = 2, color = "blue", data = emm_jCox)+
+#   geom_ribbon(aes(x = X, ymin = lwrCIR, ymax = uprCIR, alpha = 2), data = emm_jCox, fill = "blue", show.legend = FALSE)+
+#   scale_x_continuous(name = "Date", breaks = c(1,11,21,31,42), labels = c("Oct 01", "Nov 01","Dec 01", "Jan 01", "Feb 01"))+
+#   ylab("Predicted grunt rate")+
+#   theme(axis.title = element_text(size = 14),
+#         axis.text = element_text(size = 12))
 
 
 # # Attempting figure for observed vs predicted at Cox Ledge each spawning season

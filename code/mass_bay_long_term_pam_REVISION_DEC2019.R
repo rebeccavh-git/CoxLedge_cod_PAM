@@ -686,6 +686,8 @@ if(TRUE){
   
   #FUNTIONS TO ALLOW FOR SHORTHAND REFERENCES TO CIRCULAR VARIABLES (Handy!!)
   #CREATE A LIST OF FORMULAE FOR ALL POSSIBLE VARIABLE COMBINATIONS
+  
+  ## Becca ran these functions to get the multimodel to run
   if(TRUE){
     fun<-function(x){
       form<-paste(unlist(x),collapse="+")
@@ -932,12 +934,63 @@ if(TRUE){
   load(fn)
   
   
+  
+  
+  #### Becca - need these
+  
+  ictab<-function(x){
+    modz<-names(x)
+    aicz<-LIC(x,crit="AIC")
+    bicz<-LIC(x,crit="BIC")
+    dfz<-unlist(lapply(x,FUN=edf))
+    dfz<-round(unlist(lapply(x,FUN=edf)),3)
+    daicz<-round(aicz-min(aicz,na.rm=TRUE),1)
+    dbicz<-round(bicz-min(bicz,na.rm=TRUE),1)
+    wa<-aicz; wa[is.na(wa)]<-Inf;  # wa<-round(Weights(wa),3)
+    wb<-bicz; wb[is.na(wb)]<-Inf;  # wb<-round(Weights(wb),3)
+    #de<-round(unlist(lapply(x,FUN=devexp)),1)
+    df<-data.frame(mod=modz,wA=wa,wB=wb,dAIC=daicz,dBIC=dbicz,AIC=aicz,BIC=bicz,edf=dfz)
+    rownames(df)<-NULL
+    return(df)
+  }
+  
+  LIC<-function(x,crit="AIC"){
+    if(crit=="AIC"){IC<-function(x,...)AIC(x,...)}
+    if(crit=="BIC"){IC<-function(x,...)BIC(x,...)}
+    out<-NULL
+    for(i in 1:length(x)){
+      ic<-try(IC(x[[i]]))
+      this<-NA
+      if(!'try-error'%in%class(ic))this<-ic
+      out<-c(out,this)
+    }
+    return(out)
+  }
+  
+  #CALC EQUIVALENT DF FOR A GAM, GLM, etc
+  edf<-function(x){
+    isbad<-'try-error'%in%class(try(nobs(x),silent=TRUE))
+    if(!isbad)return(nobs(x)-df.residual(x))
+    if(isbad)return(NA)
+  }
+  
+  predict_multimod<-function(modz,weights=rep(1,length(modz)),newdata=NULL,type='response',se.fit=FALSE){
+    out<-NULL
+    for(m in modz){
+      this<-predict(m,newdata=newdata,type=type,se.fit=se.fit)
+      out<-cbind(out,this)
+    }
+    weights<-weights/sum(weights) #NORMALIZE TO SUM TO 1
+    return(rowSums(t(t(out)*weights)))
+  }
+  
+  
   #bmodz<-list(b0,b1,b2,b3,b4,b5,b6,b7,b8,b9,b10,b11,b12,b13)
   #names(bmodz)<-lapply(bmodz,FUN=function(x){unfun(formula(x))})
   #bmodz[[length(bmodz)+1]]<-b17
   names(bmodz)<-paste("b",1:length(bmodz),sep="")
-  btab<-ictab(bmodz)
-  btab$mod<-names(bmodz)
+  btab<-ictab(bmodz) # only got this to run by commenting out part of the ictab function
+  btab$mod<-names(bmodz) 
   btab$form<-unlist(lapply(bmodz,function(x){unfun(x[["modelInfo"]]$allForm$formula)}))
   btab$loglik<-unlist(lapply(bmodz,logLik))
   btab$dup<-duplicated(btab[,-1])
@@ -945,9 +998,9 @@ if(TRUE){
   btab$dAIC[btab$CAND]<-btab$AIC[btab$CAND]-min(btab$AIC[btab$CAND],na.rm=TRUE)
   btab$w<-round(exp(-0.5*btab$dAIC)/sum(exp(-0.5*btab$dAIC),na.rm=TRUE),4)
   btab$PRED<-btab$w>0.1&!is.na(btab$w)
-  btab<-btab[order(-btab$CAND,btab$AIC),][c("mod","form","loglik","AIC","dAIC","w","df","PRED")]
+  btab<-btab[order(-btab$CAND,btab$AIC),][c("mod","form","loglik","AIC","dAIC","w","edf","PRED")]
   btab
-  write.csv(btab,file="bmod_aic.csv")
+  write.csv(btab,file="data/bmod_aic.csv")
   
   #zmodz<-list(z_0,z_w,z_w1,z_w2,z_w3,z_w_z1,z_w_z2,z_w_z3,z_w_z4,z_w_z5,z_w_z6,z_w_z9,z_w_z10,z_w_z11,z_w_z12,z_w_z13,z_w_z14)
   #names(zmodz)<-lapply(zmodz,FUN=function(x){unfun(formula(x))})
@@ -963,9 +1016,9 @@ if(TRUE){
   ztab$dAIC[ztab$CAND]<-ztab$AIC[ztab$CAND]-min(ztab$AIC[ztab$CAND],na.rm=TRUE)
   ztab$w<-round(exp(-0.5*ztab$dAIC)/sum(exp(-0.5*ztab$dAIC),na.rm=TRUE),4)
   ztab$PRED<-ztab$w>0.1&!is.na(ztab$w)
-  ztab<-ztab[order(-ztab$CAND,ztab$AIC),][c("mod","form","ziform","loglik","AIC","dAIC","w","df","PRED")]
+  ztab<-ztab[order(-ztab$CAND,ztab$AIC),][c("mod","form","ziform","loglik","AIC","dAIC","w","edf","PRED")]
   ztab
-  write.csv(ztab,file="zmod_aic.csv")
+  write.csv(ztab,file="data/zmod_aic.csv")
   
 
 
@@ -1038,6 +1091,12 @@ if(TRUE){
 write.csv(summary(bbest)$coefficients$cond,file="est_pars_bbest.csv")
 write.csv(summary(zbest)$coefficients$cond,file="est_pars_zbest.csv")
 write.csv(summary(zbest)$coefficients$zi,file="est_pars_zbest_zi.csv")
+
+
+### Becca try to start here ####
+load("data/gsub.rdat")
+load("data/pam_mixed_modz.rdat")
+
 
 #####################
 #Observed v Predicted 
@@ -1250,7 +1309,7 @@ if(TRUE){
 mtext(side=3,"b)",adj=0,cex=cx*1.5,line=3)
 dev.off()
 
-
+### Becca - this is helpful! #####
 ###################
 #CIRCULAR VARIABLES FX
 
