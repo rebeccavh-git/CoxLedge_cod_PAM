@@ -28,11 +28,13 @@ cod = read.csv('data/codCox13_14_final.csv', header = TRUE)
 cod[cod$Channel != 9,] = NA
 cod = na.omit(cod)
 
+# most of these removed are false positives (rechecked calls on 1/10/2022)
+# possible detections are: Ch 7, selection 843, on 12/13 and Ch8, selection 876 on 12/25
 
 # paste date and time into a single lubridate datetime
-cod$DateTime = paste(cod$BeginDate, cod$BeginClockTime, sep = " ") 
-cod$DateTime = ymd_hms(cod$DateTime, tz = "EST") 
-
+cod$DateTimeUTC = paste(cod$BeginDate, cod$BeginClockTime, sep = " ") 
+cod$DateTimeUTC = ymd_hms(cod$DateTime, tz = "UTC") 
+cod$DateTime = with_tz(cod$DateTimeUTC, tzone = "EST")
 
 #assign spawning season
 cod$SpawnSeason = case_when(
@@ -129,22 +131,22 @@ ggplot(data=cod, aes(x=hour(DateTime)))+ theme_bw()+
 
 
 # plot Mean grunts per hour for each day across spawning season. Single plot for each spawning season
-meanGruntHrDay = cod %>%
-  group_by(SpawnSeason, month, day) %>%
-  summarize(meanGrunt = mean(n_grunts))
+#meanGruntHrDay = cod %>%
+#  group_by(SpawnSeason, month = month(cod$DateTime), day = date(cod$DateTime)) %>%
+#  summarize(meanGrunt = mean(n_grunts))
 
-meanGruntHrDay["month"][meanGruntHrDay["month"] == "1"] = 13
-meanGruntHrDay$monthday = paste(meanGruntHrDay$month, meanGruntHrDay$day, sep = "_")
+#meanGruntHrDay["month"][meanGruntHrDay["month"] == "1"] = 13
+#meanGruntHrDay$monthday = paste(meanGruntHrDay$month, meanGruntHrDay$day, sep = "_")
 
 # average grunts per hour on each day, (modeled after Zemeckis et al (2019) Fig 6)
 # add model predictions to these also
-ggplot(data = meanGruntHrDay, aes(x = monthday, y = meanGrunt))+ theme_bw()+
-  geom_col()+
-  scale_x_discrete(breaks = c("11_01","12_01","13_01"), 
-                  labels = c("Nov", "Dec", "Jan"))+
-  ylab("Average number of grunts per hour")+
-  facet_grid(rows = vars(SpawnSeason))+
-  theme(axis.title.x = element_blank())
+# ggplot(data = meanGruntHrDay, aes(x = monthday, y = meanGrunt))+ theme_bw()+
+#   geom_col()+
+#   scale_x_discrete(breaks = c("11_01","12_01","13_01"), 
+#                   labels = c("Nov", "Dec", "Jan"))+
+#   ylab("Average number of grunts per hour")+
+#   facet_grid(rows = vars(SpawnSeason))+
+#   theme(axis.title.x = element_blank())
 
 
 ```
@@ -168,6 +170,7 @@ ggplot(data=cod, aes(x = lunarphase))+ theme_bw()+
 ggplot(data=cod, aes(x = lunarphase))+ theme_bw()+
   geom_histogram(fill='grey',color='black', bins = 20)+
   coord_polar(start = 0)+
+  facet_grid(cols = vars(SpawnSeason))+
   scale_y_continuous(name = "Number of grunts observed",limits = c(-5,100))+
   scale_x_continuous(breaks = c(0,pi/2, pi, 3*pi/2),labels = c("New", "Waxing","Full","Waning"))+
   xlab("Lunar Phase")+
@@ -304,6 +307,17 @@ write.csv(cod_data, "data/codCoxModelData.csv")
 
 ```{r}
 # Fig 1: Map
+
+# Fig: Observed grunts per day
+ggplot(data = gruntperday, aes(x = day, y = n_grunts))+ theme_bw()+
+  geom_col()+
+  scale_x_continuous(breaks = c(1,7,14,21,28), limits = c(1,32))+
+  facet_grid(rows = vars(SpawnSeason), cols = vars(month))+
+  xlab("Day of the Month")+ ylab("Observed number of grunts")+
+  #ggtitle("Seasonal Patterns in Sound Production")+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        strip.text = element_text(size = 12))
 
 # Fig 2 Observed grunts per hour
 ggplot(data = gruntperhr, aes(x = hour, y = avg_hr))+ theme_bw()+

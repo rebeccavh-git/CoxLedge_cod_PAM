@@ -1,0 +1,32 @@
+"","mod","form","ziform","loglik","AIC","dAIC","w","edf","PRED"
+"18","z18","Y + S + H + L2 + J + rW + L1 + S:J","Y + S + H + J + rW + L1 + S:J",-40473.6767681267,81201.3535362533,0,0.4511,127,TRUE
+"20","z20","Y + S + H + L2 + J + rW + L1 + S:J","Y + S + H + L2 + J + rW + L1 + S:J",-40473.2707164164,81204.5414328328,3.18789657946036,0.0916,129,FALSE
+"16","z16","Y + S + H + L2 + J + rW + S:J","Y + S + H + J + rW + S:J",-40482.5832672024,81211.1665344048,9.81299815143575,0.0033,123,FALSE
+"12","z12","Y + S + H + L2 + J + rW + S:J","Y + S + H + J + L2 + rW + S:J",-40482.0863532496,81214.1727064992,12.8191702458425,7e-04,125,FALSE
+"17","z17","Y + S + H + J + rW + S:J","Y + S + H + J + L2 + rW + S:J",-40484.9993320165,81215.9986640329,14.6451277796004,3e-04,123,FALSE
+"6","z6","Y + S + H + L1 + L2 + J + rW + S:J","Y + S + H + J",-41076.9413614262,82341.8827228524,1140.52918659909,0,94,FALSE
+"3","z3","Y + S + H + L2 + J + rW + S:J","Y + S + H",-41258.8667182833,82697.7334365666,1496.37990031326,0,90,FALSE
+"2","z2","Y + S + H + L1 + L2 + J + rW + S:J","Y + S + H",-41257.1550364183,82698.3100728367,1496.95653658334,0,92,FALSE
+"5","z5","Y + S + H + J + rW + S:J","Y + S + H",-41262.0016778632,82700.0033557264,1498.64981947301,0,88,FALSE
+"4","z4","Y + S + H + L1 + J + rW + S:J","Y + S + H",-41260.1548169294,82700.3096338587,1498.95609760541,0,90,FALSE
+"22","z22","Y + S + H + L2 + J + rW + L1 + DEPTH + S:J","Y + S + H + J + rW + L1 + DEPTH + S:J",-40466.1739260324,81190.3478520649,0,0.4511,129,TRUE
+"19","z19","Y + S + H + L2 + J + rW + L1 + S:J","Y + S + H + J + rW + L1 + S:J",-40473.6767681267,81201.3535362533,11,0.0018,127,FALSE
+"30","z30","Y + S + H + L2 + J + rW + L1 + DEPTH + S:J","S + H + J + rW + L1 + DEPTH + S:J",-40519.1032064054,81278.2064128109,87.9,0,120,FALSE
+"1","z1","Y + S + H + L1 + L2 + J + S:J","Y + S + H",NA,NA,NA,NA,91,FALSE
+"7","z7","Y + S + H + L1 + L2 + J + rW + S:J","Y + S + H + S:J",NA,NA,NA,NA,124,FALSE
+"8","z8","Y + S + H + L1 + L2 + J + rW + S:J","Y + S + H + J + L1",NA,NA,NA,NA,96,FALSE
+"9","z9","Y + S + H + L1 + L2 + J + rW + S:J","Y + S + H + J + rW",NA,NA,NA,NA,95,FALSE
+"10","z10","Y + S + H + L1 + L2 + J + rW + S:J","Y + S + H + rW",NA,NA,NA,NA,93,FALSE
+"11","z11","Y + S + H + L2 + J + rW + S:J","Y + S + H + J",NA,NA,NA,NA,92,FALSE
+"13","z13","Y + S + H + L1 + L2 + J + rW + S:J + Y:S","Y + S + H + Y:S",NA,NA,NA,NA,362,FALSE
+"14","z14","Y + S + H + L1 + L2 + J + rW + S:J","Y + S + H + Y:S",NA,NA,NA,NA,227,FALSE
+"15","z15","Y + S + H + L1 + L2 + J + rW + S:J + Y:S","Y + S + H + DEPTH:J + DEPTH:J + Y:S",NA,NA,NA,NA,364,FALSE
+"21","z21","Y + S + H + L2 + J + rW + L1 + S:J","Y + S + H + L2 + J + rW + L1 + DEPTH + S:J",NA,NA,NA,NA,130,FALSE
+"23","z23","Y + S + H + L2 + J + rW + L1 + DEPTH + S:J","Y + S + H + L2 + J + rW + L1 + DEPTH + S:J",NA,NA,NA,NA,131,FALSE
+"24","z24","Y + S + H + L2 + J + rW + L1 + DEPTH + S:J","Y + S + H + L2 + J + rW + L1 + DEPTH + S:J",NA,NA,NA,NA,131,FALSE
+"25","z25","Y + S + H + L2 + J + rW + DEPTH + S:J","Y + S + H + L2 + J + rW + DEPTH + S:J",NA,NA,NA,NA,127,FALSE
+"26","z26","Y + S + H + L2 + J + rW + L1 + DEPTH + S:J","Y + S + H + L2 + J + rW + L1 + S:J",NA,NA,NA,NA,130,FALSE
+"27","z27","Y + S + H + L2 + J + rW + L1 + DEPTH + S:J","Y + S + H + L2 + J + rW + L1 + S:J",NA,NA,NA,NA,130,FALSE
+"28","z28","Y + S + H + L2 + J + rW + L1 + DEPTH + S:J","Y + S + H + L2 + J + rW + L1 + DEPTH",NA,NA,NA,NA,101,FALSE
+"29","z29","Y + S + H + L2 + J + rW + L1 + DEPTH + S:J","S + H + J + rW + L1 + S:J",NA,NA,NA,NA,119,FALSE
+"31","z31","Y + S + H + L2 + J + rW + L1 + DEPTH + S:J","Y + S + H + J + rW + L1 + S:J",NA,NA,NA,NA,128,FALSE

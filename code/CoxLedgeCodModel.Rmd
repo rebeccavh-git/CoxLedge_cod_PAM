@@ -107,6 +107,7 @@ global_P = glmmTMB(presence ~ SpawnSeason + sday + cday + sLunar + cLunar + sLun
 global_P_quadDay = glmmTMB(presence ~ SpawnSeason + J_center + daySq + sLunar + cLunar + sLunar2 + cLunar2 + shour + chour + (1|wk),
                    data = cox, family = binomial)
 
+
 # treating day as a quadratic doesn't substantially improve fit, but it does make more mathematical sense
 AIC(global_P, global_P_quadDay)
 
@@ -133,7 +134,6 @@ model.sel(global_P_quadDay, bin1, bin2, bin3)
 # Mass Bay bbest is the same as bin2
 
 #### Rate: Zero-inflated negative binomial
-#gtmbcon<-glmmTMBControl(optCtrl=list(iter.max=10e3,eval.max=10e3))
 
 # This threw multiple errors/warnings related to infinite or missing values, and na function evaluation
 #global_R = glmmTMB(n_grunts ~ SpawnSeason + J_center + daySq + sLunar + cLunar + sLunar2 + cLunar2 + shour + chour + (1|wk),
@@ -141,6 +141,10 @@ model.sel(global_P_quadDay, bin1, bin2, bin3)
 #                   ziformula = ~.)
 
 global_R_nb2 = glmmTMB(n_grunts ~ SpawnSeason + J_center + daySq + sLunar + cLunar + sLunar2 + cLunar2 + shour + chour + (1|wk),
+                   data = cox, family = nbinom2(),
+                   ziformula = ~.)
+#removed random effect of week and it fixed the model convergence problem
+global_R_cDay = glmmTMB(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 + shour + chour,
                    data = cox, family = nbinom2(),
                    ziformula = ~.)
   
@@ -158,6 +162,8 @@ zinb2 = glmmTMB(n_grunts ~ SpawnSeason + J_center + daySq + sLunar2 + cLunar2 + 
 
 model.sel(global_R_nb2, zinb1, zinb2)
 #model.sel(global_R_nb2, zinb1, zinb2, nb1)
+model.sel(global_R_nb2, global_R_cDay)
+
 
 # Global model is still the best
 ```
@@ -235,12 +241,12 @@ nd = cbind(nd,ndRate[,c(3:5)])
 emm_lCox = summaryBy(cbind(fittedP,lwrCIP,uprCIP,fittedR,lwrCIR,uprCIR)~Lunar,data=nd,FUN=mean,keep.names=TRUE)
 
 
-## Annual effect 
+## Annual effect - code mimicking Mass Bay method 
 subsetJ = seq(1,123,by=3)
 J = unique(cox$J)[subsetJ]
 J_centerRange = unique(cox$J_center)[subsetJ]
 daySq = J_centerRange^2
-edate<-as.Date('2010-12-31')+J
+edate<-as.Date('2013-12-31')+J
 df_j<-data.frame(J,J_centerRange,daySq,edate)
 df_j$J_daySq = paste(df_j$J_centerRange, df_j$daySq, sep = "_")
 emm_j_pg<-as.data.frame(emmeans(bbestCox,~J_center+daySq,at=list(J=J,J_center=J_centerRange,daySq=daySq)),type='response')
@@ -249,6 +255,9 @@ emm_j_pg$J_daySq = paste(emm_j_pg$J_center,emm_j_pg$daySq, sep = "_")
 emm_j_rg$J_daySq = paste(emm_j_rg$J_center,emm_j_rg$daySq, sep = "_")
 emm_j_pg<-left_join(df_j,emm_j_pg, by = "J_daySq")
 emm_j_rg<-left_join(df_j,emm_j_rg, by = "J_daySq")
+#manually calculating CI from SE
+emm_j_rg$lwrCIRm = emm_j_rg$response + qnorm(0.025)*emm_j_rg$SE # gives nonsensical neg lower CI, due to response scale
+emm_j_rg$uprCIRm = emm_j_rg$response + qnorm(0.975)*emm_j_rg$SE # gives reasonable upper CI level
 
 emm_jCox = df_j
 emm_jCox$fittedP = emm_j_pg$prob
@@ -258,9 +267,61 @@ emm_jCox$fittedR = emm_j_rg$response
 emm_jCox$lwrCIR = emm_j_rg$lower.CL
 emm_jCox$uprCIR = emm_j_rg$upper.CL
 
-write.csv(emm_hCox, "data/emm_DielFX_Cox_v2.csv")
-write.csv(emm_lCox,"data/emm_LunarFX_Cox_v2.csv")
-write.csv(emm_jCox,"data/emm_AnnualFx_Cox_v2.csv")
+# plotting with lower CI as given by emmeans, upper CI as 2*SE to avoid unreasonable CI in October
+# technically cheating
+ggplot(data = emm_j_rg, aes(x = J_centerRange, y = response))+ theme_bw()+
+  geom_line(size = 2, color = "blue")+
+  geom_ribbon(aes(ymin = lower.CL, ymax = uprCIRm, alpha = 2), fill = "blue", show.legend = FALSE)+
+  #scale_x_continuous(name = "J", breaks = c(274,304,334,,397), labels = c("Oct 01", "Nov 01","Dec 01", "Jan 01", "Feb 01"))+
+  ylab("Predicted grunt rate")+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12))+
+  ggtitle("Global Model (Day as quadratic, tz = EST, upper CI response+2*SE)")
+
+# retrying old code with type = "response"
+J_centerRange = unique(cox$J_center)
+nd = expand.grid(SpawnSeason=as.character(unique(cox$SpawnSeason)),J_center=J_centerRange,Lunar=pi,hour=0,wk = NA)
+nd$daySq = nd$J_center^2
+nd = make_circ(nd)
+nd = cbind(nd,as.data.frame(predict(bbestCox,newdata=nd,type='response',se.fit = TRUE)))
+nd$fittedP = nd$fit 
+nd$lwrCIP = nd$fit + qnorm(0.025)*nd$se.fit
+nd$uprCIP =  nd$fit + qnorm(0.975)*nd$se.fit
+ndRate = as.data.frame(predict(zbestCox,newdata=nd,type='response',se.fit = TRUE)) 
+ndRate$lwrCIR = ndRate$fit + qnorm(0.025)*ndRate$se.fit 
+ndRate$uprCIR = ndRate$fit + qnorm(0.975)*ndRate$se.fit 
+ndRate$fittedR = ndRate$fit
+nd = cbind(nd,ndRate)
+emm_jCox = summaryBy(cbind(fittedP,lwrCIP,uprCIP,fittedR,lwrCIR,uprCIR)~J_center,data=nd,FUN=mean,keep.names=TRUE)
+# This gives negative lower CI because it is supposed to be calculated on the link scale, 
+# could likely fix by calculating CI using bootstrapping 
+
+# retrying model with circular day rather than quadratic
+# this works, but had to remove the random effect of week
+# the peak rate of 12/14 seems pretty late based on observed data
+# plus this model had a worse fit to the data than the original model with day as quadratic and random week
+J<-seq(273,396,by=3)
+sday<-sin(2*pi*(J/365))
+cday<-cos(2*pi*(J/365))
+edate<-as.Date('2010-12-31')+J
+df_j<-data.frame(J,sday,cday,edate)
+emm_j_rg<-as.data.frame(emmeans(global_R_cDay,~sday+cday,at=list(J=J,sday=sday,cday=cday)),type='response')
+emm_j_rg<-merge(df_j,emm_j_rg)
+
+ggplot(data = emm_j_rg, aes(x = edate, y = response))+ theme_bw()+
+  geom_line(size = 2, color = "blue")+
+  geom_ribbon(aes(ymin = lower.CL, ymax = upper.CL, alpha = 2), fill = "blue", show.legend = FALSE)+
+  #scale_x_continuous(name = "J", breaks = c(274,304,334,,397), labels = c("Oct 01", "Nov 01","Dec 01", "Jan 01", "Feb 01"))+
+  ylab("Predicted grunt rate")+
+  theme(axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12))+
+  ggtitle("Global Model (Day as circular - much higher AIC)")
+
+
+write.csv(emm_hCox, "data/emm_DielFX_Cox_v3.csv")
+write.csv(emm_lCox,"data/emm_LunarFX_Cox_v3.csv")
+write.csv(emm_jCox,"data/emm_AnnualFx_Cox_EST.csv") # original zbest model with EST
+#write.csv()
 
 ```
 
@@ -348,6 +409,7 @@ emm_j_pg<-merge(df_j,emm_j_pg)
 emm_j_rg<-merge(df_j,emm_j_rg)
 # the merge function matches all instances of paired Jsin, Jcos in df_j with the corresponding response/prob and CI from emm_j
 
+# remaking dataframe to match figure code
 emm_jMB = as.data.frame(c(31:1))
 colnames(emm_jMB) = "X"
 emm_jMB$J = emm_j_pg$J
@@ -374,7 +436,9 @@ write.csv(emm_jMB,"data/emm_AnnualFx_365.csv")
 # Cox Ledge
 emm_hCox = read.csv("data/emm_DielFX_Cox_v2.csv", header = TRUE)
 emm_lCox = read.csv("data/emm_LunarFX_Cox_v2.csv", header = TRUE)
-emm_jCox = read.csv("data/emm_AnnualFx_Cox_v2.csv", header = TRUE)
+#emm_jCox = read.csv("data/emm_AnnualFx_Cox_v2.csv", header = TRUE)
+emm_jCox = read.csv("data/emm_AnnualFx_Cox_EST.csv", header = TRUE)
+
 # Mass Bay
 emm_hMB = read.csv("data/emm_DielFX.csv", header = TRUE)
 emm_lMB = read.csv("data/emm_LunarFX.csv", header = TRUE)
@@ -474,11 +538,12 @@ DayMB = ggplot(data = emm_jMB, aes(x = X, y = fittedR))+ theme_bw()+
 
 DayCox = ggplot(data = emm_jCox, aes(x = X, y = fittedR))+ theme_bw()+
   geom_line(size = 2, color = "blue")+
-  geom_ribbon(aes(ymin = lwrCIR, ymax = uprCIR, alpha = 2), fill = "blue", show.legend = FALSE)+
+  #geom_ribbon(aes(ymin = lwrCIR, ymax = uprCIR, alpha = 2), fill = "blue", show.legend = FALSE)+
   scale_x_continuous(name = "", breaks = c(1,11,21,31,42), labels = c("Oct 01", "Nov 01","Dec 01", "Jan 01", "Feb 01"))+
   ylab("Predicted grunt rate")+
   theme(axis.title = element_text(size = 14),
-        axis.text = element_text(size = 12))
+        axis.text = element_text(size = 12))+
+  ggtitle("Global Model (Day as quadratic, tz = EST)")
  
 grid.arrange(DayMB,DayCox,nrow = 1, ncol = 2)
 
