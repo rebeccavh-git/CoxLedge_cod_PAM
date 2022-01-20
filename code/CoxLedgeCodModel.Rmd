@@ -96,7 +96,7 @@ meanDay = mean(PresenceOnly$Jedit)
 
 ```
 
-## Build and evaluate Cox Ledge Models
+## Grunt Presence: Build and evaluate Cox Ledge  Models
 
 ```{r}
 #### Presence - binomial
@@ -110,6 +110,9 @@ global_P_quadDay = glmmTMB(presence ~ SpawnSeason + J_center + daySq + sLunar + 
 
 # treating day as a quadratic doesn't substantially improve fit, but it does make more mathematical sense
 AIC(global_P, global_P_quadDay)
+BIC(global_P, global_P_quadDay)
+
+# Day as a quadratic term
 
 bin1 = glmmTMB(presence ~ SpawnSeason + J_center + daySq + sLunar2 + cLunar2 + shour + chour + (1|wk),
                    data = cox, family = binomial)
@@ -130,9 +133,29 @@ bin3 = glmmTMB(presence ~ SpawnSeason + J_center + daySq + shour + chour + (1|wk
 
 model.sel(global_P_quadDay, bin1, bin2, bin3)
 
+
 # global model is only marginally better than model without L2 terms
 # Mass Bay bbest is the same as bin2
 
+bin1 = glmmTMB(presence ~ SpawnSeason + sday + cday + sLunar2 + cLunar2 + shour + chour + (1|wk),
+                   data = cox, family = binomial)
+
+bin2 = glmmTMB(presence ~ SpawnSeason + sday + cday + sLunar + cLunar + shour + chour + (1|wk),
+                   data = cox, family = binomial)
+
+bin3 = glmmTMB(presence ~ SpawnSeason + sday + cday + shour + chour + (1|wk),
+                   data = cox, family = binomial)
+
+model.sel(global_P, bin1, bin2, bin3)
+BIC(global_P, bin1, bin2, bin3)
+
+## AIC gives global model as the best fit, BIC gives bin2 (without semi-lunar) as best fit
+
+```
+
+## Grunt Rate: Build and evaluate Cox Ledge models
+
+```{r}
 #### Rate: Zero-inflated negative binomial
 
 # This threw multiple errors/warnings related to infinite or missing values, and na function evaluation
@@ -144,9 +167,9 @@ global_R_nb2 = glmmTMB(n_grunts ~ SpawnSeason + J_center + daySq + sLunar + cLun
                    data = cox, family = nbinom2(),
                    ziformula = ~.)
 #removed random effect of week and it fixed the model convergence problem
-global_R_cDay = glmmTMB(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 + shour + chour,
+global_R_cDay = glmmTMB(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 + shour + chour + (1|wk),
                    data = cox, family = nbinom2(),
-                   ziformula = ~.)
+                   ziformula = ~.-(1|wk))
   
 zinb1 = glmmTMB(n_grunts ~ SpawnSeason + J_center + daySq + sLunar + cLunar + sLunar2 + cLunar2 + shour + chour + (1|wk),
                    data = cox, family = nbinom2(),
@@ -162,10 +185,37 @@ zinb2 = glmmTMB(n_grunts ~ SpawnSeason + J_center + daySq + sLunar2 + cLunar2 + 
 
 model.sel(global_R_nb2, zinb1, zinb2)
 #model.sel(global_R_nb2, zinb1, zinb2, nb1)
-model.sel(global_R_nb2, global_R_cDay)
-
 
 # Global model is still the best
+
+## Day as a circular variable: remove (1|wk) from count process to allow model convergence
+# effect of day is not significant in conditional model
+global_R_cDay = glmmTMB(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 + shour + chour + (1|wk),
+                   data = cox, family = nbinom2(),
+                   ziformula = ~.-(1|wk))
+  
+zinb1 = glmmTMB(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 + shour + chour + (1|wk),
+                   data = cox, family = nbinom2(),
+                   ziformula = ~. - sLunar2 -cLunar2 -(1|wk))
+
+zinb2 = glmmTMB(n_grunts ~ SpawnSeason + sday + cday + sLunar2 + cLunar2 + shour + chour + (1|wk),
+                   data = cox, family = nbinom2(),
+                   ziformula = ~. - sLunar2 -cLunar2 -(1|wk))
+
+# deviation from Mass bay models - removed hour from conditional model bc it wasn't significant in global model
+zinb3 = glmmTMB(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 + (1|wk),
+                   data = cox, family = nbinom2(),
+                   ziformula = ~. +shour +chour-(1|wk))
+
+# confirm that zero-inflation is needed
+#nb1 = glmmTMB(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 + shour + chour + (1|wk),
+#                   data = cox, family = nbinom2())
+
+model.sel(global_R_cDay, zinb1, zinb2, zinb3)
+BIC(global_R_cDay, zinb1, zinb2, zinb3)
+
+# Possible method explanation: started with a candidate model set as identified in Caiger et al. with some terms removed due to smaller study with only a single site. Compared support for each model using AIC, then to prevent overfitting removed any non-significant model terms and compared support with the best model identified from the candidate model set. 
+
 ```
 
 ## Summarize EM Means of best models 
@@ -174,10 +224,19 @@ model.sel(global_R_nb2, global_R_cDay)
 # Best Models
 bbestCox = glmmTMB(presence ~ SpawnSeason + J_center + daySq + sLunar + cLunar + sLunar2 + cLunar2 + shour + chour + (1|wk),
                    data = cox, family = binomial)
+# checking new presence model
+bbestCox = bin2
 
-zbestCox = glmmTMB(n_grunts ~ SpawnSeason + J_center + daySq + sLunar + cLunar + sLunar2 + cLunar2 + shour + chour + (1|wk),
+#zbestCox = glmmTMB(n_grunts ~ SpawnSeason + J_center + daySq + sLunar + cLunar + sLunar2 + cLunar2 + shour + chour + (1|wk),
+#                   data = cox, family = nbinom2(),
+#                   ziformula = ~.)
+
+# new zbestCox
+#zbestCox = zinb3
+zbestCox = glmmTMB(n_grunts ~ SpawnSeason + sday + cday + sLunar + cLunar + sLunar2 + cLunar2 + (1|wk),
                    data = cox, family = nbinom2(),
-                   ziformula = ~.)
+                   ziformula = ~. +shour +chour-(1|wk))
+
 
 # Function to calculate reference grids
 make_circ<-function(d){
@@ -205,7 +264,32 @@ make_circ<-function(d){
       out$cLunar2<-cos(out$Lunar2) #SEMI-LUNAR
     }
     return(out)
+}
+
+## if keep models with day as circular: use this make_circ function
+make_circ<-function(d){
+  out<-d
+  namez<-names(d)
+  if("hour"%in%namez){
+    out$shour<-sin(2*pi*(out$hour/24))
+    out$chour<-cos(2*pi*(out$hour/24))
   }
+  if("J"%in%namez){  #original code for when model included circular day
+    out$sday<-sin(2*pi*(out$J/365))
+    out$cday<-cos(2*pi*(out$J/365))
+  }
+  if("Lunar"%in%namez){
+    out$sLunar<-sin(out$Lunar)
+    out$cLunar<-cos(out$Lunar)
+    out$Lunar2<-out$Lunar
+    out$Lunar2[out$Lunar2>pi]<-out$Lunar2[out$Lunar2>pi]-pi
+    out$Lunar2<-2*out$Lunar2
+    out$sLunar2<-sin(out$Lunar2) #SEMI-LUNAR
+    out$cLunar2<-cos(out$Lunar2) #SEMI-LUNAR
+  }
+  return(out)
+}
+
 
 # Averages: Midnight, Full moon, Day = 337 (mean day of presence)
 # Compare predictions with day = 337 
@@ -305,7 +389,7 @@ sday<-sin(2*pi*(J/365))
 cday<-cos(2*pi*(J/365))
 edate<-as.Date('2010-12-31')+J
 df_j<-data.frame(J,sday,cday,edate)
-emm_j_rg<-as.data.frame(emmeans(global_R_cDay,~sday+cday,at=list(J=J,sday=sday,cday=cday)),type='response')
+emm_j_rg<-as.data.frame(emmeans(zinb3,~sday+cday,at=list(J=J,sday=sday,cday=cday)),type='response')
 emm_j_rg<-merge(df_j,emm_j_rg)
 
 ggplot(data = emm_j_rg, aes(x = edate, y = response))+ theme_bw()+
@@ -315,7 +399,7 @@ ggplot(data = emm_j_rg, aes(x = edate, y = response))+ theme_bw()+
   ylab("Predicted grunt rate")+
   theme(axis.title = element_text(size = 14),
         axis.text = element_text(size = 12))+
-  ggtitle("Global Model (Day as circular - much higher AIC)")
+  ggtitle("Global Model (Day as circular - no rW in rate terms)")
 
 
 write.csv(emm_hCox, "data/emm_DielFX_Cox_v3.csv")
